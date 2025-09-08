@@ -4,10 +4,11 @@
 // TODO: replace any `lua require` if possible
 // TODO: test if the plugins/binds actually work
 
+#include <ctype.h>
+#include <lauxlib.h>
+#include <lua.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <lua.h>
-#include <lauxlib.h>
 
 #include "nvim_api.c"
 
@@ -16,9 +17,9 @@
 #include "fileio.c"
 
 /* GLOBALS */
-char const g_package_dir[] = "/site/";
-char const g_mini_plugin_dir[] = "pack/deps/opt/mini.nvim";
-char const g_install_mini_nvim_command[] =
+static char const g_package_dir[] = "/site/";
+static char const g_mini_plugin_dir[] = "pack/deps/opt/mini.nvim";
+static char const g_install_mini_nvim_command[] =
   "git clone --filter=blob:none https://github.com/nvim-mini/mini.nvim ";
 
 /* HELPERS */
@@ -86,7 +87,7 @@ nvim_set_g(
 {
   Error e = ERROR_INIT;
   nvim_set_var(nvim_mk_string(key), val, &e);
-  if(e.type != kErrorTypeNone) { PANIC_FMT(L, "ERROR: %s\n", e.msg); }
+  if(e.type != kErrorTypeNone) { PANIC_FMT(L, "ERROR(%d): %s\n", e.type, e.msg); }
 }
 
 static inline void
@@ -98,7 +99,7 @@ nvim_set_o(
   Dict(option) o = {};
   Error e = ERROR_INIT;
   nvim_set_option_value(0, nvim_mk_string(key), val, &o, &e);
-  if(e.type != kErrorTypeNone) { PANIC_FMT(L, "ERROR: %s\n", e.msg); }
+  if(e.type != kErrorTypeNone) { PANIC_FMT(L, "ERROR(%d): %s\n", e.type, e.msg); }
 }
 
 // Key Mapping
@@ -112,7 +113,7 @@ nvim_map(
   Dict(keymap) o = {.noremap = true, .silent = true};
   Error e = ERROR_INIT;
   nvim_set_keymap(0, nvim_mk_string(mode), nvim_mk_string(key), nvim_mk_string(action), &o, &e);
-  if(e.type != kErrorTypeNone) { PANIC_FMT((L), "ERROR: %s\n", e.msg); }
+  if(e.type != kErrorTypeNone) { PANIC_FMT(L, "ERROR(%d): %s\n", e.type, e.msg); }
 }
 
 static inline void
@@ -123,10 +124,249 @@ nvim_highlight(
 {
   Error e = ERROR_INIT;
   nvim_set_hl(0, 0, nvim_mk_string(group), &opts, &e);
-  if(e.type != kErrorTypeNone) { PANIC_FMT((L), "ERROR: %s\n", e.msg); }
+  if(e.type != kErrorTypeNone) { PANIC_FMT(L, "ERROR(%d): %s\n", e.type, e.msg); }
+}
+
+// Auto Cmds
+static inline Integer // WARN: untested
+nvim_mk_augroup_callback(
+    lua_State *L,
+    char *name,
+    char *desc,
+    char *augroup_name,
+    bool augroup_clear,
+    Union(String, LuaRefOf((DictAs(create_autocmd__callback_args) args), *Boolean)) callback)
+{
+  Arena arena = ARENA_EMPTY; // WARN: I dont know if this lives long enough
+  Error e = ERROR_INIT;
+
+  Dict(create_augroup) augroup = {};
+  PUT_KEY(augroup, create_augroup, clear, augroup_clear);
+
+  Dict(create_autocmd) autocmd = {};
+  PUT_KEY(autocmd, create_autocmd, desc, nvim_mk_string(desc));
+  PUT_KEY(autocmd, create_autocmd, group,
+      nvim_mk_obj_int(nvim_create_augroup(0, nvim_mk_string(augroup_name), &augroup, &e)));
+  PUT_KEY(autocmd, create_autocmd, callback, callback);
+
+  Integer n = nvim_create_autocmd(0, nvim_mk_obj_string(name), &autocmd, &arena, &e);
+  if(e.type != kErrorTypeNone) { PANIC_FMT(L, "ERROR(%d): %s\n", e.type, e.msg); }
+  return n;
+}
+
+static inline Integer
+nvim_mk_augroup_command(
+    lua_State *L,
+    char *name,
+    char *desc,
+    char *augroup_name,
+    bool augroup_clear,
+    String command)
+{
+  Arena arena = ARENA_EMPTY; // WARN: I dont know if this lives long enough
+  Error e = ERROR_INIT;
+
+  Dict(create_augroup) augroup = {};
+  PUT_KEY(augroup, create_augroup, clear, augroup_clear);
+
+  Dict(create_autocmd) autocmd = {};
+  PUT_KEY(autocmd, create_autocmd, desc, nvim_mk_string(desc));
+  PUT_KEY(autocmd, create_autocmd, group,
+      nvim_mk_obj_int(nvim_create_augroup(0, nvim_mk_string(augroup_name), &augroup, &e)));
+  PUT_KEY(autocmd, create_autocmd, command, command);
+
+  Integer n = nvim_create_autocmd(0, nvim_mk_obj_string(name), &autocmd, &arena, &e);
+  if(e.type != kErrorTypeNone) { PANIC_FMT(L, "ERROR(%d): %s\n", e.type, e.msg); }
+  return n;
+}
+
+// WARN: only works with utf-8, better than only ascii right??
+Codepoint
+try_next_codepoint(
+    uint8_t **string,
+    size_t *len)
+{
+  if(*len == 0) { return CODEPOINT_INVALID; }
+
+  Codepoint codepoint = CODEPOINT_INVALID;
+  uint8_t *str = *string;
+
+  if(str[0] <= 0x7F) // ascii
+  {
+    codepoint = str[0];
+    *string += 1;
+    *len -= 1;
+  }
+  else if((str[0] >> 5) == 0x6) // 2
+  {
+    // check valid [1]
+    if(*len < 2) { goto EXIT; }
+    codepoint =
+        ((str[0] & 0x1F) << 6) |
+        (str[1] & 0x3F);
+    *string += 2;
+    *len -= 2;
+  }
+  else if((str[0] >> 4) == 0xE) // 3
+  {
+    if(*len < 3) { goto EXIT; }
+    codepoint =
+        ((str[0] & 0xF) << 12) |
+        ((str[1] & 0x3F) << 6) |
+        (str[2] & 0x3F);
+    *string += 3;
+    *len -= 3;
+  }
+  else if((str[0] >> 3) == 0x1E) // 4
+  {
+    if(*len < 4) { goto EXIT; }
+    codepoint =
+        ((str[0] & 0x7) << 18) |
+        ((str[1] & 0x3F) << 12) |
+        ((str[2] & 0x3F) << 6) |
+        (str[3] & 0x3F);
+    *string += 4;
+    *len -= 4;
+  }
+
+EXIT:
+  return codepoint;
 }
 
 /* MAIN */
+int
+completer(
+    lua_State *L)
+{
+  int nargs = lua_gettop(L);
+  if(nargs < 1)
+  {
+    PANIC(L, "completer: expected at least 1 arg");
+    return 1;
+  }
+
+  int findstart = (int)lua_tointeger(L, 1);
+
+  Arena arena = ARENA_EMPTY;
+  Error err = ERROR_INIT;
+
+  if(findstart == 1)
+  {
+    do_cmdline_cmd("lua print(vim.inspect(vim.api.nvim_buf_get_lines(0, 0, -1, false)))");
+    do_cmdline_cmd("lua print(vim.in_fast_event())");
+    // get line
+    String curline = nvim_get_current_line(&arena, &err);
+    if(curline.size == 0) { goto EXIT; }
+
+    // get current pos in line
+    ArrayOf(Integer, 2) cursor = nvim_win_get_cursor(0, &arena, &err);
+    int col = (int)cursor.items[1].data.integer - 2;
+    ASSERT(L, col >= 0);
+    ASSERT(L, (size_t)col < curline.size);
+
+    // search backwards for start of identifier
+    size_t i;
+    for(i = (size_t)col;
+        i > 0;
+        i--)
+    {
+      char ch = curline.data[i - 1];
+      if(!(isalpha(ch) || isdigit(ch) || ch == '_')) // TODO: depends on language normally :)
+      {
+        break;
+      }
+    }
+
+    // return start of ident
+    lua_pushinteger(L, i);
+    return 1;
+  }
+  else // longest match
+  {
+    do_cmdline_cmd("lua print(vim.inspect(vim.api.nvim_buf_get_lines(0, 0, -1, false)))");
+    do_cmdline_cmd("lua print(vim.in_fast_event())");
+    size_t base_len = 0;
+    char const *base = NULL;
+    if(nargs >= 2 && lua_type(L, 2) == LUA_TSTRING)
+    {
+      base = lua_tolstring(L, 2, &base_len);
+    }
+    else
+    {
+      base_len = 0;
+      base = NULL;
+    }
+    (void)base;
+    if(base_len == 0) { goto EXIT; }
+
+    // TODO: get buftype
+
+    // TODO: table of matches
+
+    // longest
+    {
+      // each buffer
+      // PERF: maybe worker thread this?
+      ArrayOf(Buffer) bufs = nvim_list_bufs(&arena);
+      for(size_t bi = 0;
+          bi < bufs.size;
+          bi++)
+      {
+        Buffer buf = bufs.items[bi].data.integer;
+        if(!nvim_buf_is_loaded(buf)) { continue; }
+
+        // each line
+        // TODO: COMPLETER DOES NOT WORK, CANT GET THE LINES FOR SOME REASON
+        ArrayOf(String) lines = nvim_buf_get_lines(0, buf, 0, -1, false, &arena, L, &err);
+        ASSERT(L, lines.size > 0);
+        for(size_t li = 0;
+            li < lines.size;
+            li++)
+        {
+          // find each word in the line
+          String curr_line = lines.items[li].data.string;
+          if(curr_line.size == 0) { continue; }
+          Codepoint curr_codepoint = curr_line.data[0];
+          while(curr_line.size != 0)
+          {
+            // skip non identifiers
+            while(!(isalpha(curr_codepoint) || curr_codepoint == '_'))
+            {
+              curr_codepoint = try_next_codepoint((uint8_t **)&curr_line.data, &curr_line.size);
+            }
+
+            char *ident = curr_line.data;
+            // find end of identifier
+            while(isalpha(curr_codepoint)
+                || isdigit(curr_codepoint)
+                || curr_codepoint == '_')
+            {
+              curr_codepoint = try_next_codepoint((uint8_t **)&curr_line.data, &curr_line.size);
+            }
+            size_t ident_len = curr_line.data - ident;
+
+            // check if the word is prefixed with the base
+            PANIC_FMT(L, "%*s\n", ident_len, ident);
+            if(base_len <= ident_len && memcmp(base, ident, base_len))
+            {
+              PANIC_FMT(L, "compare remainder with the longest match `%*s` `%*s`\n",
+                  base_len, base, ident_len, ident);
+            }
+          }
+        }
+      }
+    }
+
+    lua_createtable(L, 1, 0);
+    lua_pushstring(L, "nonsense");
+    lua_rawseti(L, -2, 1);
+    return 1;
+  }
+
+EXIT:
+  return 0;
+}
+
 int
 luaopen_config(
     lua_State *L)
@@ -258,13 +498,8 @@ luaopen_config(
   nvim_set_o(L, "wildmode", nvim_mk_obj_string("longest:full"));
   nvim_set_o(L, "wildmenu", nvim_mk_obj_bool(true));
 
-  /*
-  Object complete_menu = nvim_mk_obj_string("longest,noinsert,noselect");
-  nvim_set_g(L, "complete_menu", complete_menu);
-  nvim_set_o(L, "completeopt", complete_menu);
-  nvim_set_o(L, "pumheight", nvim_mk_obj_int(4));
-  */
-
+  nvim_set_o(L, "completeopt", nvim_mk_obj_string("longest"));
+  nvim_set_o(L, "completefunc", nvim_mk_obj_string("v:lua.completer"));
 
   /* SETUP THE PACKAGE MANAGER */
   // require the package manager
@@ -285,208 +520,229 @@ luaopen_config(
   {
 do_cmdline_cmd("lua require('mini.ai').setup { n_lines = 500 }");
 do_cmdline_cmd("lua require('mini.bracketed').setup {}");
-do_cmdline_cmd("lua require('mini.comment').setup {\
-  options = {\
-    custom_commentstring = function()\
-      local remap = {\
-        verilog = '/* %s */',\
-      }\
-      for ft, cm in pairs(remap) do\
-        if vim.bo.ft == ft then\
-          return cm\
-        end\
-      end\
-      return nil\
-    end,\
-    ignore_blank_line = true,\
-  },\
+do_cmdline_cmd("lua require('mini.comment').setup { \
+  options = { \
+    custom_commentstring = function() \
+      local remap = { \
+        verilog = '/* %s */', \
+      } \
+      for ft, cm in pairs(remap) do \
+        if vim.bo.ft == ft then \
+          return cm \
+        end \
+      end \
+      return nil \
+    end, \
+    ignore_blank_line = true, \
+  }, \
 }");
 
 // Detect Tabbing
-do_cmdline_cmd("lua MiniDeps.add {\
-  source = 'tpope/vim-sleuth',\
+do_cmdline_cmd("lua MiniDeps.add { \
+  source = 'tpope/vim-sleuth', \
 }");
 
 // Git Signs
-do_cmdline_cmd("lua MiniDeps.add {\
-  source = 'lewis6991/gitsigns.nvim',\
+do_cmdline_cmd("lua MiniDeps.add { \
+  source = 'lewis6991/gitsigns.nvim', \
 }");
-do_cmdline_cmd("lua require('gitsigns').setup {\
-  signs = {\
-    add = { text = '+' },\
-    change = { text = '~' },\
-    delete = { text = '_' },\
-    topdelete = { text = '‾' },\
-    changedelete = { text = '~' },\
-  },\
+do_cmdline_cmd("lua require('gitsigns').setup { \
+  signs = { \
+    add = { text = '+' }, \
+    change = { text = '~' }, \
+    delete = { text = '_' }, \
+    topdelete = { text = '‾' }, \
+    changedelete = { text = '~' }, \
+  }, \
 }");
-// TODO: setup hunk binds
+// Git Signs Hunks
+nvim_map(L, "n", "]h", "<cmd>lua require('gitsigns').nav_hunk('next')<cr>");
+nvim_map(L, "n", "[h", "<cmd>lua require('gitsigns').nav_hunk('prev')<cr>");
 
 // File Explorer
-do_cmdline_cmd("lua MiniDeps.add {\
-  source = 'stevearc/oil.nvim',\
+do_cmdline_cmd("lua MiniDeps.add { \
+  source = 'stevearc/oil.nvim', \
 }");
-do_cmdline_cmd("lua require('oil').setup {\
-  columns = {\
-    --[[ 'permissions',]]\
-    --[[ 'size',]]\
-    'mtime',\
-    'icon',\
-  },\
-  natural_order = true,\
-  delete_to_trash = true,\
-  keymaps = {\
-    ['g?'] = 'actions.show_help',\
-    ['<CR>'] = 'actions.select',\
-    ['L'] = 'actions.select',\
-    ['H'] = 'actions.parent',\
-    ['<C-c>'] = 'actions.close',\
-    ['<C-l>'] = 'actions.refresh',\
-    ['g.'] = 'actions.toggle_hidden',\
-    ['g\\\\'] = 'actions.toggle_trash',\
-  },\
-  view_options = {\
-    show_hidden = true,\
-  },\
+do_cmdline_cmd("lua require('oil').setup { \
+  columns = { \
+    --[[ 'permissions',]] \
+    --[[ 'size',]] \
+    'mtime', \
+    'icon', \
+  }, \
+  natural_order = true, \
+  delete_to_trash = true, \
+  keymaps = { \
+    ['g?'] = 'actions.show_help', \
+    ['<CR>'] = 'actions.select', \
+    ['L'] = 'actions.select', \
+    ['H'] = 'actions.parent', \
+    ['<C-c>'] = 'actions.close', \
+    ['<C-l>'] = 'actions.refresh', \
+    ['g.'] = 'actions.toggle_hidden', \
+    ['g\\\\'] = 'actions.toggle_trash', \
+  }, \
+  view_options = { \
+    show_hidden = true, \
+  }, \
 }");
-// TODO: setup binding
+nvim_map(L, "n", "<leader>uf", "<cmd>Oil<cr>");
 
 // Visual Undo Tree
-do_cmdline_cmd("lua MiniDeps.add {\
-  source = 'jiaoshijie/undotree',\
-  depends = { 'nvim-lua/plenary.nvim' },\
+do_cmdline_cmd("lua MiniDeps.add { \
+  source = 'jiaoshijie/undotree', \
+  depends = { 'nvim-lua/plenary.nvim' }, \
 }");
 do_cmdline_cmd("lua require('undotree').setup {}");
-// TODO: setup binding
+nvim_map(L, "n", "<leader>cu", "<cmd>lua require('undotree').toggle()<cr>");
 
 // Show Keybinds
-do_cmdline_cmd("lua MiniDeps.add {\
-  source = 'folke/which-key.nvim',\
+do_cmdline_cmd("lua MiniDeps.add { \
+  source = 'folke/which-key.nvim', \
 }");
 do_cmdline_cmd("lua require('which-key').setup { delay = 300 }");
 
-do_cmdline_cmd("lua MiniDeps.add {\
-  source = 'nvim-telescope/telescope.nvim',\
-  depends = {\
-    { source = 'nvim-lua/plenary.nvim' },\
-    {\
-      source = 'nvim-telescope/telescope-fzf-native.nvim',\
-      build = 'make',\
-      cond = function()\
-        return vim.fn.executable 'make' == 1\
-      end,\
-    },\
-  },\
+do_cmdline_cmd("lua MiniDeps.add { \
+  source = 'nvim-telescope/telescope.nvim', \
+  depends = { \
+    { source = 'nvim-lua/plenary.nvim' }, \
+    { \
+      source = 'nvim-telescope/telescope-fzf-native.nvim', \
+      build = 'make', \
+      cond = function() \
+        return vim.fn.executable 'make' == 1 \
+      end, \
+    }, \
+  }, \
 }");
 do_cmdline_cmd("lua require('telescope').setup {}");
 do_cmdline_cmd("lua pcall(require('telescope').load_extension, 'fzf')");
 do_cmdline_cmd("lua pcall(require('telescope').load_extension, 'ui-select')");
-// TODO: setup bindings
+nvim_map(L, "n", "<leader>sn", "<cmd>lua vim.cmd('e ' .. vim.fn.stdpath 'config')<cr>");
+nvim_map(L, "n", "<leader>sf", "<cmd>lua require('telescope.builtin').find_files()<cr>");
+nvim_map(L, "n", "<leader>sg", "<cmd>lua require('telescope.builtin').live_grep()<cr>");
+nvim_map(L, "n", "<leader>sd", "<cmd>lua require('telescope.builtin').diagnostics()<cr>");
+nvim_map(L, "n", "<leader>s.", "<cmd>lua require('telescope.builtin').oldfiles()<cr>");
+nvim_map(L, "n", "<leader>so", "<cmd>lua require('telescope.builtin').buffers()<cr>");
+nvim_map(L, "n", "<leader>sm", "<cmd>lua require('telescope.builtin').man_pages({sections={'ALL'}})<cr>");
 
 // QOL Improvements for marks
-do_cmdline_cmd("lua MiniDeps.add {\
-  source = 'chentoast/marks.nvim',\
+do_cmdline_cmd("lua MiniDeps.add { \
+  source = 'chentoast/marks.nvim', \
 }");
-do_cmdline_cmd("lua require('marks').setup {\
-  default_mappings = true,\
-  mappings = {},\
+do_cmdline_cmd("lua require('marks').setup { \
+  default_mappings = true, \
+  mappings = {}, \
 }");
 
 // Jump To Files
-do_cmdline_cmd("lua MiniDeps.add {\
-  source = 'ThePrimeagen/harpoon',\
-  checkout = 'harpoon2',\
-  depends = { 'nvim-lua/plenary.nvim' }\
+do_cmdline_cmd("lua MiniDeps.add { \
+  source = 'ThePrimeagen/harpoon', \
+  checkout = 'harpoon2', \
+  depends = { 'nvim-lua/plenary.nvim' } \
 }");
 do_cmdline_cmd("lua require('harpoon'):setup()");
-// TODO: setup bindings
+nvim_map(L, "n", "<M-m>", "require('harpoon'):list():add()");
+nvim_map(L, "n", "<leader>hm", "require('harpoon'):list():add()");
+nvim_map(L, "n", "<M-l>", "require('harpoon').ui:toggle_quick_menu(require('harpoon'):list())");
+nvim_map(L, "n", "<leader>hl", "require('harpoon').ui:toggle_quick_menu(require('harpoon'):list())");
+nvim_map(L, "n", "<M-f>", "require('harpoon'):list():select(1)");
+nvim_map(L, "n", "<leader>hf", "require('harpoon'):list():select(1)");
+nvim_map(L, "n", "<M-d>", "require('harpoon'):list():select(2)");
+nvim_map(L, "n", "<leader>hd", "require('harpoon'):list():select(2)");
+nvim_map(L, "n", "<M-s>", "require('harpoon'):list():select(3)");
+nvim_map(L, "n", "<leader>hs", "require('harpoon'):list():select(3)");
+nvim_map(L, "n", "<M-a>", "require('harpoon'):list():select(4)");
+nvim_map(L, "n", "<leader>ha", "require('harpoon'):list():select(4)");
 
-// SUGGEST: do we want to support LSP?
+// SUGGEST: do we want to support LSP Config?
 
 // Auto Format
-do_cmdline_cmd("lua MiniDeps.add {\
-  source = 'stevearc/conform.nvim',\
+do_cmdline_cmd("lua MiniDeps.add { \
+  source = 'stevearc/conform.nvim', \
 }");
-do_cmdline_cmd("lua require('conform').setup {\
-  formatters_by_ft = {\
-    c = { 'clang-format' },\
-    cpp = { 'clang-format' },\
-    clojure = { 'cljfmt' },\
-    haskell = { 'fourmolu', 'ormolu', stop_after_first = true },\
-    html = { 'prettier' },\
-    java = { 'google-java-format' },\
-    lua = { 'stylua' },\
-    odin = { 'odinfmt' },\
-    purescript = { 'purescript-tidy' },\
-    python = function(bufnr)\
-      if require('conform').get_formatter_info('ruff_format', bufnr).available then\
-        return { 'ruff_format' }\
-      else\
-        return { 'isort', 'black' }\
-      end\
-    end,\
-    rust = { 'rustfmt' },\
-    cs = { 'csharpier' },\
-    typescript = { 'biome' },\
-    javascript = { 'biome' },\
-  },\
-  formatters = {\
-    odinfmt = {\
-      --[[ Change where to find the command if it isn't in your path.]]\
-      command = 'odinfmt',\
-      args = { '-stdin' },\
-      stdin = true,\
-    },\
-  },\
+do_cmdline_cmd("lua require('conform').setup { \
+  formatters_by_ft = { \
+    c = { 'clang-format' }, \
+    cpp = { 'clang-format' }, \
+    clojure = { 'cljfmt' }, \
+    haskell = { 'fourmolu', 'ormolu', stop_after_first = true }, \
+    html = { 'prettier' }, \
+    java = { 'google-java-format' }, \
+    lua = { 'stylua' }, \
+    odin = { 'odinfmt' }, \
+    purescript = { 'purescript-tidy' }, \
+    python = function(bufnr) \
+      if require('conform').get_formatter_info('ruff_format', bufnr).available then \
+        return { 'ruff_format' } \
+      else \
+        return { 'isort', 'black' } \
+      end \
+    end, \
+    rust = { 'rustfmt' }, \
+    cs = { 'csharpier' }, \
+    typescript = { 'biome' }, \
+    javascript = { 'biome' }, \
+  }, \
+  formatters = { \
+    odinfmt = { \
+      --[[ Change where to find the command if it isn't in your path.]] \
+      command = 'odinfmt', \
+      args = { '-stdin' }, \
+      stdin = true, \
+    }, \
+  }, \
 }");
-// TODO: setup bindings
+nvim_map(L, "n", "<leader>cf", "require('conform').format({ async = true, lsp_format = 'fallback' })");
 
 // Text Semantics Engine
-do_cmdline_cmd("lua MiniDeps.add {\
-  source = 'nvim-treesitter/nvim-treesitter',\
+do_cmdline_cmd("lua MiniDeps.add { \
+  source = 'nvim-treesitter/nvim-treesitter', \
 }");
-do_cmdline_cmd("lua require('nvim-treesitter').setup {\
-  auto_install = true,\
-  highlight = { enable = false },\
-  indent = { enable = false },\
+do_cmdline_cmd("lua require('nvim-treesitter').setup { \
+  auto_install = true, \
+  highlight = { enable = false }, \
+  indent = { enable = false }, \
 }");
 // TODO: auto build
 
 // Highlight Special Comments
-do_cmdline_cmd("lua MiniDeps.add {\
-  source = 'folke/todo-comments.nvim',\
-  depends = { 'nvim-lua/plenary.nvim' },\
+do_cmdline_cmd("lua MiniDeps.add { \
+  source = 'folke/todo-comments.nvim', \
+  depends = { 'nvim-lua/plenary.nvim' }, \
 }");
-do_cmdline_cmd("lua require('todo-comments').setup {\
-  signs = false,\
-  search = {\
-    pattern = [[\\b(KEYWORDS)(\\([^\\)]*\\))?:]],\
-  },\
-  highlight = {\
-    before = '',\
-    keyword = 'bg',\
-    after = '',\
-    pattern = [[.*<((KEYWORDS)%(\\(.{-1,}\\))?):]],\
-  },\
+do_cmdline_cmd("lua require('todo-comments').setup { \
+  signs = false, \
+  search = { \
+    pattern = [[\\b(KEYWORDS)(\\([^\\)]*\\))?:]], \
+  }, \
+  highlight = { \
+    before = '', \
+    keyword = 'bg', \
+    after = '', \
+    pattern = [[.*<((KEYWORDS)%(\\(.{-1,}\\))?):]], \
+  }, \
 }");
+nvim_map(L, "n", "<leader>st", "<cmd>TodoTelescope<cr>");
 
 // Highlight Color Codes
-do_cmdline_cmd("lua MiniDeps.add {\
-  source = 'catgoose/nvim-colorizer.lua',\
+do_cmdline_cmd("lua MiniDeps.add { \
+  source = 'catgoose/nvim-colorizer.lua', \
 }");
-do_cmdline_cmd("lua require('colorizer').setup {\
-  user_default_options = { names = false },\
+do_cmdline_cmd("lua require('colorizer').setup { \
+  user_default_options = { names = false }, \
 }");
+nvim_map(L, "n", "<leader>uh", "<cmd>Colortils<cr>");
 
 // Edit Color Codes
-do_cmdline_cmd("lua MiniDeps.add {\
-  source = 'max397574/colortils.nvim',\
+do_cmdline_cmd("lua MiniDeps.add { \
+  source = 'max397574/colortils.nvim', \
 }");
 do_cmdline_cmd("lua require('colortils').setup {}");
 
 // Theme
-do_cmdline_cmd("lua MiniDeps.add {\
-  source = 'zenbones-theme/zenbones.nvim',\
+do_cmdline_cmd("lua MiniDeps.add { \
+  source = 'zenbones-theme/zenbones.nvim', \
 }");
 
 nvim_set_o(L, "background", nvim_mk_obj_string("light"));
@@ -507,7 +763,7 @@ nvim_set_o(L, "background", nvim_mk_obj_string("light"));
   /* POST OPTIONS */
   /* Keymaps */
   // Auto Completion
-  nvim_map(L, "i", "<c-space>", "<c-x><c-o>");
+  nvim_map(L, "i", "<c-space>", "<c-x><c-u>");
 
   // Terminal Binds
   nvim_map(L, "t", "<C-w>", "<c-\\><c-n>");
@@ -570,47 +826,25 @@ nvim_map(L, "n", "<leader>mm", "<cmd>make<cr>");
   nvim_map(L, "n", "<leader>pz", "<cmd>horizontal resize<cr><cmd>vertical resize<cr>");
 
   nvim_map(L, "n", "<leader>pN", "<cmd>setlocal buftype=nofile<cr>"); // turn off ability to save
-
-  // Git Signs Hunks
-  nvim_map(L, "n", "]h", "<cmd>lua require('gitsigns').nav_hunk('next')<cr>");
-  nvim_map(L, "n", "[h", "<cmd>lua require('gitsigns').nav_hunk('prev')<cr>");
-
-  // Search
-  nvim_map(L, "n", "<leader>st", "<cmd>TodoTelescope<cr>");
-  nvim_map(L, "n", "<leader>sn", "<cmd>lua vim.cmd('e ' .. vim.fn.stdpath 'config')<cr>");
-  nvim_map(L, "n", "<leader>sf", "<cmd>lua require('telescope.builtin').find_files()<cr>");
-  nvim_map(L, "n", "<leader>sg", "<cmd>lua require('telescope.builtin').live_grep()<cr>");
-  nvim_map(L, "n", "<leader>sd", "<cmd>lua require('telescope.builtin').diagnostics()<cr>");
-  nvim_map(L, "n", "<leader>s.", "<cmd>lua require('telescope.builtin').oldfiles()<cr>");
-  nvim_map(L, "n", "<leader>so", "<cmd>lua require('telescope.builtin').buffers()<cr>");
-  nvim_map(L, "n", "<leader>sm", "<cmd>lua require('telescope.builtin').marks()<cr>");
-
-  // Oil
-  nvim_map(L, "n", "<leader>uf", "<cmd>Oil<cr>");
-
-  // Auto Format
-  nvim_map(L, "n", "<leader>cf", "require('conform').format({ async = true, lsp_format = 'fallback' })");
-
-  // Colortils
-  nvim_map(L, "n", "<leader>uh", "<cmd>Colortils<cr>");
-
-  // Undo Tree
-  nvim_map(L, "n", "<leader>cu", "<cmd>lua require('undotree').toggle()<cr>");
   /* End Keymaps */
 
   /* Auto Cmds */
   // Highlight when yanking (copying) text
-  /* TODO: autocmd
-  vim.api.nvim_create_autocmd('TextYankPost', {
-    desc = 'Highlight when yanking (copying) text',
-    group = vim.api.nvim_create_augroup('my-highlight-yank', { clear = true }),
-    callback = function()
-    vim.highlight.on_yank { on_visual = false }
-    end,
-  })
-  */
+  nvim_mk_augroup_command(L, "TextYankPost", "Highlight when yanking (copying) text", "my-highlight-yank", true,
+      nvim_mk_string("lua vim.highlight.on_yank({ on_visual = false })"));
+
+  /* Extra Settings */
+  // syntax off
+  do_cmdline_cmd("syntax off");
+
+  /* RETURNS */
+  lua_newtable(L);
+
+  // register completion function
+  lua_pushcfunction(L, completer);
+  lua_setfield(L, -2, "completer"); // TODO: COMPLETER DOES NOT WORK
 
   /* EXIT */
   deinit_arena(&string_arena);
-  return 0;
+  return 1;
 }

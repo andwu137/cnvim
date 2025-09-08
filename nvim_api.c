@@ -8,17 +8,41 @@
 #include <stdlib.h>
 #include <string.h>
 
-// https://github.com/neovim/neovim/blob/51af2797c2fe0fdb1774d6dd4383d8cbed215df0/src/klib/kvec.h#L53
+// BEGIN https://github.com/neovim/neovim/blob/51af2797c2fe0fdb1774d6dd4383d8cbed215df0/src/klib/kvec.h#L53
 #define kvec_t(type) \
   struct { \
     size_t size; \
     size_t capacity; \
     type *items; \
   }
+// END
 
-typedef int LuaRef; // https://github.com/neovim/neovim/blob/master/src/nvim/types_defs.h
+// BEGIN https://github.com/neovim/neovim/blob/master/src/nvim/types_defs.h
+typedef int LuaRef;
+typedef int handle_T;
+// END
 
+// BEGIN https://github.com/neovim/neovim/blob/master/src/nvim/memory_defs.h#L12
+typedef struct consumed_blk {
+  struct consumed_blk *prev;
+} *ArenaMem;
+
+typedef struct {
+  char *cur_blk;
+  size_t pos, size;
+} Arena;
+
+#define ARENA_BLOCK_SIZE 4096
+
+// inits an empty arena.
+#define ARENA_EMPTY { .cur_blk = NULL, .pos = 0, .size = 0 }
+// END
+
+#define ARRAY_DICT_INIT KV_INITIAL_VALUE
+#define STRING_INIT { .data = NULL, .size = 0 }
+#define OBJECT_INIT { .type = kObjectTypeNil }
 #define ERROR_INIT ((Error) { .type = kErrorTypeNone, .msg = NULL })
+#define REMOTE_TYPE(type) typedef handle_T type
 
 #define ArrayOf(...) Array
 #define DictOf(...) Dict
@@ -36,7 +60,6 @@ typedef int64_t Integer;
 typedef double Float;
 
 typedef Integer HLGroupID;
-/* EXCLUDE #include "api/private/defs.h.inline.generated.h" */
 
 // Basic types
 typedef enum {
@@ -59,8 +82,15 @@ typedef struct {
   size_t size;
 } String;
 
+REMOTE_TYPE(Buffer);
+REMOTE_TYPE(Window);
+REMOTE_TYPE(Tabpage);
+
 typedef struct object Object;
 typedef kvec_t(Object) Array;
+
+typedef struct key_value_pair KeyValuePair;
+typedef kvec_t(KeyValuePair) Dict;
 
 typedef enum {
   kObjectTypeNil = 0,
@@ -84,24 +114,42 @@ struct object {
     Integer integer;
     Float floating;
     String string;
-    /* EXCLUDE Array array; */
-    /* EXCLUDE Dict dict; */
-    /* EXCLUDE LuaRef luaref; */
+    Array array;
+    Dict dict;
+    LuaRef luaref;
   } data;
 };
 
 typedef uint64_t OptionalKeys;
+// END
 
-/* END https://github.com/neovim/neovim/blob/master/src/nvim/api/private/defs.h */
 
-// https://github.com/neovim/neovim/blob/51af2797c2fe0fdb1774d6dd4383d8cbed215df0/src/nvim/api/keysets_defs.h#L165
+// BEGIN https://github.com/neovim/neovim/blob/51af2797c2fe0fdb1774d6dd4383d8cbed215df0/src/nvim/api/keysets_defs.h#L165
 typedef struct {
   Object scope;
   Object win;
   Object buf;
-} KeyDict_option;
+} Dict(option);
 
-// https://github.com/neovim/neovim/blob/51af2797c2fe0fdb1774d6dd4383d8cbed215df0/src/nvim/api/keysets_defs.h#L93
+typedef struct {
+  OptionalKeys is_set__create_autocmd_;
+  Buffer buffer;
+  Union(String, LuaRefOf((DictAs(create_autocmd__callback_args) args), *Boolean)) callback;
+  String command;
+  String desc;
+  Union(Integer, String) group;
+  Boolean nested;
+  Boolean once;
+  Union(String, ArrayOf(String)) pattern;
+} Dict(create_autocmd);
+
+typedef struct {
+  OptionalKeys is_set__create_augroup_;
+  Boolean clear;
+} Dict(create_augroup);
+// END
+
+// BEGIN https://github.com/neovim/neovim/blob/51af2797c2fe0fdb1774d6dd4383d8cbed215df0/src/nvim/api/keysets_defs.h#L93
 typedef struct {
   OptionalKeys is_set__keymap_;
   Boolean noremap;
@@ -148,8 +196,9 @@ typedef struct {
   Boolean force;
   String url;
 } Dict(highlight);
+// END
 
-// https://github.com/neovim/neovim/blob/master/src/nvim/os/stdpaths_defs.h#L12
+// BEGIN https://github.com/neovim/neovim/blob/master/src/nvim/os/stdpaths_defs.h#L12
 typedef enum {
   kXDGNone = -1,
   kXDGConfigHome,  ///< XDG_CONFIG_HOME
@@ -160,6 +209,29 @@ typedef enum {
   kXDGConfigDirs,  ///< XDG_CONFIG_DIRS
   kXDGDataDirs,    ///< XDG_DATA_DIRS
 } XDGVarType;
+// END
+
+// BEGIN https://github.com/neovim/neovim/blob/acb99b8a6572d8ea8d917955a653945550923be0/src/nvim/api/private/helpers.h#L67
+#define HAS_KEY(d, typ, key) (((d)->is_set__##typ##_ & (1ULL << KEYSET_OPTIDX_##typ##__##key)) != 0)
+
+#define PUT_KEY(d, typ, key, v) \
+  do { (d).is_set__##typ##_ |= (1ULL << KEYSET_OPTIDX_##typ##__##key); (d).key = v; } while (0)
+// END
+
+// BEGIN build neovim: build/src/nvim/auto/keysets_defs.generated.h
+#define KEYSET_OPTIDX_create_autocmd__desc 1
+#define KEYSET_OPTIDX_create_autocmd__once 2
+#define KEYSET_OPTIDX_create_autocmd__group 3
+#define KEYSET_OPTIDX_create_autocmd__buffer 4
+#define KEYSET_OPTIDX_create_autocmd__nested 5
+#define KEYSET_OPTIDX_create_autocmd__command 6
+#define KEYSET_OPTIDX_create_autocmd__pattern 7
+#define KEYSET_OPTIDX_create_autocmd__callback 8
+// END
+
+// BEGIN build neovim: build/src/nvim/auto/keysets_defs.generated.h
+#define KEYSET_OPTIDX_create_augroup__clear 1
+// END
 
 /* API Functions */
 extern int do_cmdline_cmd(const char *cmd);
@@ -176,5 +248,19 @@ extern void nvim_set_option_value(uint64_t channel_id, String name, Object value
 extern void nvim_set_var(String name, Object value, Error *err);
 extern void nvim_set_keymap(uint64_t channel_id, String mode, String lhs, String rhs, Dict(keymap) * opts, Error *err);
 extern void nvim_set_hl(uint64_t channel_id, Integer ns_id, String name, Dict(highlight) *val, Error *err);
+
+extern Buffer nvim_get_current_buf(void);
+extern ArrayOf(String) nvim_buf_get_lines(
+    uint64_t channel_id, Buffer buffer, Integer start, Integer end, Boolean strict_indexing, Arena *arena, lua_State *lstate, Error *err);
+
+extern String nvim_get_current_line(Arena *arena, Error *err);
+extern ArrayOf(Buffer) nvim_list_bufs(Arena *arena);
+extern Boolean nvim_buf_is_loaded(Buffer buffer);
+extern ArrayOf(Integer, 2) nvim_win_get_cursor(Window window, Arena *arena, Error *err);
+
+extern Integer nvim_create_augroup(
+    uint64_t channel_id, String name, Dict(create_augroup) *opts, Error *err);
+extern Integer nvim_create_autocmd(
+    uint64_t channel_id, Object event, Dict(create_autocmd) *opts, Arena *arena, Error *err);
 
 #endif // NVIM_API_C
