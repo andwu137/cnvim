@@ -833,10 +833,6 @@ nvim_map(L, "n", "<leader>mm", "<cmd>make<cr>");
   nvim_mk_augroup_command(L, "TextYankPost", "Highlight when yanking (copying) text", "my-highlight-yank", true,
       nvim_mk_string("lua vim.highlight.on_yank({ on_visual = false })"));
 
-  /* Extra Settings */
-  // syntax off
-  do_cmdline_cmd("syntax off");
-
   /* RETURNS */
   lua_newtable(L);
 

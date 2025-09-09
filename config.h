@@ -6,6 +6,10 @@
   #define PATH_MAX MAX_PATH
 #endif
 
+#ifndef uint
+typedef unsigned int uint;
+#endif
+
 #define STRINGIFY_IND(x) #x
 #define STRINGIFY(x) STRINGIFY_IND(x)
 #define MULTILINE_STRING(x) STRINGIFY(x)

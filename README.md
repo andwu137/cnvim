@@ -5,7 +5,9 @@ I tested this on `nvim-v0.11.3`, `luajit-5.1`.
 My compilation steps are (and this could be specific to my machine):
 ```bash
 git clone https://github.com/andwu137/cnvim.git
-make release LUA_CFLAGS="-I/usr/include/luajit-2.1/ -lluajit-5.1"
+gcc -Wall -Wextra -Wpedantic -O3 -march=native make.c -o make_c
+./make_c -I/usr/include/luajit-2.1/ -lluajit-5.1 release
+# or on systems with bash, use ./make.sh
 ```
 
 Sources:
