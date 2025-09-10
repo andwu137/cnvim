@@ -233,6 +233,39 @@ typedef enum {
 #define KEYSET_OPTIDX_create_augroup__clear 1
 // END
 
+// BEGIN build neovim: build/src/nvim/auto/keysets_defs.generated.h
+#define KEYSET_OPTIDX_highlight__bg 1
+#define KEYSET_OPTIDX_highlight__fg 2
+#define KEYSET_OPTIDX_highlight__sp 3
+#define KEYSET_OPTIDX_highlight__url 4
+#define KEYSET_OPTIDX_highlight__bold 5
+#define KEYSET_OPTIDX_highlight__link 6
+#define KEYSET_OPTIDX_highlight__blend 7
+#define KEYSET_OPTIDX_highlight__cterm 8
+#define KEYSET_OPTIDX_highlight__force 9
+#define KEYSET_OPTIDX_highlight__italic 10
+#define KEYSET_OPTIDX_highlight__special 11
+#define KEYSET_OPTIDX_highlight__ctermbg 12
+#define KEYSET_OPTIDX_highlight__ctermfg 13
+#define KEYSET_OPTIDX_highlight__default 14
+#define KEYSET_OPTIDX_highlight__altfont 15
+#define KEYSET_OPTIDX_highlight__reverse 16
+#define KEYSET_OPTIDX_highlight__fallback 17
+#define KEYSET_OPTIDX_highlight__standout 18
+#define KEYSET_OPTIDX_highlight__nocombine 19
+#define KEYSET_OPTIDX_highlight__undercurl 20
+#define KEYSET_OPTIDX_highlight__underline 21
+#define KEYSET_OPTIDX_highlight__background 22
+#define KEYSET_OPTIDX_highlight__bg_indexed 23
+#define KEYSET_OPTIDX_highlight__foreground 24
+#define KEYSET_OPTIDX_highlight__fg_indexed 25
+#define KEYSET_OPTIDX_highlight__global_link 26
+#define KEYSET_OPTIDX_highlight__underdashed 27
+#define KEYSET_OPTIDX_highlight__underdotted 28
+#define KEYSET_OPTIDX_highlight__underdouble 29
+#define KEYSET_OPTIDX_highlight__strikethrough 30
+// END
+
 /* API Functions */
 extern int do_cmdline_cmd(const char *cmd);
 
