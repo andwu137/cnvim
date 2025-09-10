@@ -116,6 +116,8 @@ nvim_map(
   if(e.type != kErrorTypeNone) { PANIC_FMT(L, "ERROR(%d): %s\n", e.type, e.msg); }
 }
 
+#define NVIM_MAP_CMD(L, mode, key, action) nvim_map(L, mode, key, "<cmd>" action "<cr>")
+
 static inline void
 nvim_highlight(
     lua_State *L,
@@ -658,8 +660,8 @@ luaopen_config(
   LUA_PCALL_VOID(L, 1, 0);
 
   // Git Signs Hunks
-  nvim_map(L, "n", "]h", "<cmd>lua require('gitsigns').nav_hunk('next')<cr>");
-  nvim_map(L, "n", "[h", "<cmd>lua require('gitsigns').nav_hunk('prev')<cr>");
+  NVIM_MAP_CMD(L, "n", "]h", "lua require('gitsigns').nav_hunk('next')");
+  NVIM_MAP_CMD(L, "n", "[h", "lua require('gitsigns').nav_hunk('prev')");
 
   // File Explorer
   LUA_MINIDEPS_ADD(L);
@@ -707,7 +709,7 @@ luaopen_config(
   }
   LUA_PCALL_VOID(L, 1, 0);
 
-  nvim_map(L, "n", "<leader>uf", "<cmd>Oil<cr>");
+  NVIM_MAP_CMD(L, "n", "<leader>uf", "Oil");
 
   // Visual Undo Tree
   LUA_MINIDEPS_ADD(L);
@@ -719,7 +721,7 @@ luaopen_config(
 
   LUA_REQUIRE_SETUP(L, "undotree");
   LUA_PCALL_VOID(L, 0, 0);
-  nvim_map(L, "n", "<leader>cu", "<cmd>lua require('undotree').toggle()<cr>");
+  NVIM_MAP_CMD(L, "n", "<leader>cu", "lua require('undotree').toggle()");
 
   // Show Keybinds
   LUA_MINIDEPS_ADD(L);
@@ -759,13 +761,13 @@ luaopen_config(
   LUA_REQUIRE_SETUP(L, "telescope"); LUA_PCALL_VOID(L, 0, 0);
   LUA_REQUIRE_SETUP(L, "telescope"); lua_pushstring(L, "fzf"); LUA_PCALL_VOID(L, 1, 0);
   LUA_REQUIRE_SETUP(L, "telescope"); lua_pushstring(L, "ui-select"); LUA_PCALL_VOID(L, 1, 0);
-  nvim_map(L, "n", "<leader>sn", "<cmd>lua require('telescope.builtin').find_files({cwd=vim.fn.stdpath('config')})<cr>");
-  nvim_map(L, "n", "<leader>sf", "<cmd>lua require('telescope.builtin').find_files()<cr>");
-  nvim_map(L, "n", "<leader>sg", "<cmd>lua require('telescope.builtin').live_grep()<cr>");
-  nvim_map(L, "n", "<leader>sd", "<cmd>lua require('telescope.builtin').diagnostics()<cr>");
-  nvim_map(L, "n", "<leader>s.", "<cmd>lua require('telescope.builtin').oldfiles()<cr>");
-  nvim_map(L, "n", "<leader>so", "<cmd>lua require('telescope.builtin').buffers()<cr>");
-  nvim_map(L, "n", "<leader>sm", "<cmd>lua require('telescope.builtin').man_pages({sections={'ALL'}})<cr>");
+  NVIM_MAP_CMD(L, "n", "<leader>sn", "lua require('telescope.builtin').find_files({cwd=vim.fn.stdpath('config')})");
+  NVIM_MAP_CMD(L, "n", "<leader>sf", "lua require('telescope.builtin').find_files()");
+  NVIM_MAP_CMD(L, "n", "<leader>sg", "lua require('telescope.builtin').live_grep()");
+  NVIM_MAP_CMD(L, "n", "<leader>sd", "lua require('telescope.builtin').diagnostics()");
+  NVIM_MAP_CMD(L, "n", "<leader>s.", "lua require('telescope.builtin').oldfiles()");
+  NVIM_MAP_CMD(L, "n", "<leader>so", "lua require('telescope.builtin').buffers()");
+  NVIM_MAP_CMD(L, "n", "<leader>sm", "lua require('telescope.builtin').man_pages({sections={'ALL'}})");
 
   // QOL Improvements for marks
   LUA_MINIDEPS_ADD(L);
@@ -797,18 +799,18 @@ luaopen_config(
   LUA_REQUIRE(L, "harpoon");
   LUA_COLON_PCALL_VOID(L, "setup", 1, 0);
 
-  nvim_map(L, "n", "<M-m>", "<cmd>lua require('harpoon'):list():add()<cr>");
-  nvim_map(L, "n", "<leader>hm", "<cmd>lua require('harpoon'):list():add()<cr>");
-  nvim_map(L, "n", "<M-l>", "<cmd>lua require('harpoon').ui:toggle_quick_menu(require('harpoon'):list())<cr>");
-  nvim_map(L, "n", "<leader>hl", "<cmd>lua require('harpoon').ui:toggle_quick_menu(require('harpoon'):list())<cr>");
-  nvim_map(L, "n", "<M-f>", "<cmd>lua require('harpoon'):list():select(1)<cr>");
-  nvim_map(L, "n", "<leader>hf", "<cmd>lua require('harpoon'):list():select(1)<cr>");
-  nvim_map(L, "n", "<M-d>", "<cmd>lua require('harpoon'):list():select(2)<cr>");
-  nvim_map(L, "n", "<leader>hd", "<cmd>lua require('harpoon'):list():select(2)<cr>");
-  nvim_map(L, "n", "<M-s>", "<cmd>lua require('harpoon'):list():select(3)<cr>");
-  nvim_map(L, "n", "<leader>hs", "<cmd>lua require('harpoon'):list():select(3)<cr>");
-  nvim_map(L, "n", "<M-a>", "<cmd>lua require('harpoon'):list():select(4)<cr>");
-  nvim_map(L, "n", "<leader>ha", "<cmd>lua require('harpoon'):list():select(4)<cr>");
+  NVIM_MAP_CMD(L, "n", "<M-m>", "lua require('harpoon'):list():add()");
+  NVIM_MAP_CMD(L, "n", "<leader>hm", "lua require('harpoon'):list():add()");
+  NVIM_MAP_CMD(L, "n", "<M-l>", "lua require('harpoon').ui:toggle_quick_menu(require('harpoon'):list())");
+  NVIM_MAP_CMD(L, "n", "<leader>hl", "lua require('harpoon').ui:toggle_quick_menu(require('harpoon'):list())");
+  NVIM_MAP_CMD(L, "n", "<M-f>", "lua require('harpoon'):list():select(1)");
+  NVIM_MAP_CMD(L, "n", "<leader>hf", "lua require('harpoon'):list():select(1)");
+  NVIM_MAP_CMD(L, "n", "<M-d>", "lua require('harpoon'):list():select(2)");
+  NVIM_MAP_CMD(L, "n", "<leader>hd", "lua require('harpoon'):list():select(2)");
+  NVIM_MAP_CMD(L, "n", "<M-s>", "lua require('harpoon'):list():select(3)");
+  NVIM_MAP_CMD(L, "n", "<leader>hs", "lua require('harpoon'):list():select(3)");
+  NVIM_MAP_CMD(L, "n", "<M-a>", "lua require('harpoon'):list():select(4)");
+  NVIM_MAP_CMD(L, "n", "<leader>ha", "lua require('harpoon'):list():select(4)");
 
   // SUGGEST: do we want to support LSP Config?
 
@@ -874,7 +876,7 @@ luaopen_config(
   }
   LUA_PCALL_VOID(L, 1, 0);
 
-  nvim_map(L, "n", "<leader>cf", "<cmd>require('conform').format({ async = true, lsp_format = 'fallback' })<cr>");
+  NVIM_MAP_CMD(L, "n", "<leader>cf", "require('conform').format({ async = true, lsp_format = 'fallback' })");
 
   // Text Semantics Engine
   LUA_MINIDEPS_ADD(L);
@@ -923,7 +925,7 @@ luaopen_config(
   }
   LUA_PCALL_VOID(L, 1, 0);
 
-  nvim_map(L, "n", "<leader>st", "<cmd>TodoTelescope<cr>");
+  NVIM_MAP_CMD(L, "n", "<leader>st", "TodoTelescope");
 
   // Highlight Color Codes
   LUA_MINIDEPS_ADD(L);
@@ -937,7 +939,7 @@ luaopen_config(
     LUA_PUSH_KV_KV(L, "user_default_options", "names", boolean, false);
   }
   LUA_PCALL_VOID(L, 1, 0);
-  nvim_map(L, "n", "<leader>uh", "<cmd>Colortils<cr>");
+  NVIM_MAP_CMD(L, "n", "<leader>uh", "Colortils");
 
   // Edit Color Codes
   LUA_MINIDEPS_ADD(L);
@@ -1007,45 +1009,39 @@ luaopen_config(
   nvim_map(L, "n", "<esc>", "<cmd>nohlsearch<cr><esc>");
 
   // Diagnostics
-  nvim_map(L, "n", "<leader>uq", "<cmd>copen<cr>");
-  nvim_map(L, "n", "<leader>ul", "<cmd>lopen<cr>");
+  NVIM_MAP_CMD(L, "n", "<leader>uq", "copen");
+  NVIM_MAP_CMD(L, "n", "<leader>ul", "lopen");
 
   // Code
-  nvim_map(L, "n", "<leader>cw", "<cmd>cd %:p:h<cr>"); // move nvim base path to current buffer
-  nvim_map(L, "n", "<leader>cm", "<cmd>Man<cr>");
-  nvim_map(L, "n", "<leader>cW", "<cmd>s/\\s\\+$//g<cr>"); // remove trailing whitespace
+  NVIM_MAP_CMD(L, "n", "<leader>cw", "cd %:p:h"); // move nvim base path to current buffer
+  NVIM_MAP_CMD(L, "n", "<leader>cm", "Man");
+  NVIM_MAP_CMD(L, "n", "<leader>cW", "s/\\s\\+$//g"); // remove trailing whitespace
 
   // Make
-  /* TODO: Make
-nvim_map(L, "n", "<leader>mm", "<cmd>make<cr>");
-  local recent_make_command = 'make'
-  vim.keymap.set('n', '<leader>mc', function()
-    vim.ui.input({ prompt = 'Make Command: ', default = recent_make_command }, function(usr_input)
-    recent_make_command = usr_input
-    calm_error(vim.cmd, 'set makeprg=' .. escape_string(recent_make_command))
-    end)
-  end, { desc = 'Make [C]reate Command' })
-  */
+  NVIM_MAP_CMD(L, "n", "<leader>mm", "make");
+  NVIM_MAP_CMD(L, "n", "<leader>mc",
+    "lua vim.ui.input({ prompt = 'Make Command: ', default = vim.o.makeprg }, "
+      "function(usr_input) vim.o.makeprg = usr_input end)");
 
   // UI
-  nvim_map(L, "n", "<leader>um", "<cmd>messages<cr>");
+  NVIM_MAP_CMD(L, "n", "<leader>um", "messages");
 
   // Toggle
-  nvim_map(L, "n", "<leader>th", "<cmd>ColorizerToggle<cr>");
+  NVIM_MAP_CMD(L, "n", "<leader>th", "ColorizerToggle");
 
   // Panes
-  nvim_map(L, "n", "<leader>v", "<cmd>vsp<cr>");
-  nvim_map(L, "n", "<leader>pv", "<cmd>vsp<cr>");
-  nvim_map(L, "n", "<leader>x", "<cmd>sp<cr>");
-  nvim_map(L, "n", "<leader>px", "<cmd>sp<cr>");
-  nvim_map(L, "n", "<leader>pt", "<cmd>tab split<cr>");
+  NVIM_MAP_CMD(L, "n", "<leader>v", "vsp");
+  NVIM_MAP_CMD(L, "n", "<leader>pv", "vsp");
+  NVIM_MAP_CMD(L, "n", "<leader>x", "sp");
+  NVIM_MAP_CMD(L, "n", "<leader>px", "sp");
+  NVIM_MAP_CMD(L, "n", "<leader>pt", "tab split");
 
-  nvim_map(L, "n", "<leader>p|", "<cmd>vertical resize<cr>");
-  nvim_map(L, "n", "<leader>p_", "<cmd>horizontal resize<cr>");
-  nvim_map(L, "n", "<leader>pZ", "<cmd>wincmd =<cr>");
+  NVIM_MAP_CMD(L, "n", "<leader>p|", "vertical resize");
+  NVIM_MAP_CMD(L, "n", "<leader>p_", "horizontal resize");
+  NVIM_MAP_CMD(L, "n", "<leader>pZ", "wincmd =");
   nvim_map(L, "n", "<leader>pz", "<cmd>horizontal resize<cr><cmd>vertical resize<cr>");
 
-  nvim_map(L, "n", "<leader>pN", "<cmd>setlocal buftype=nofile<cr>"); // turn off ability to save
+  NVIM_MAP_CMD(L, "n", "<leader>pN", "setlocal buftype=nofile"); // turn off ability to save
   /* End Keymaps */
 
   /* Auto Cmds */
