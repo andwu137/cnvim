@@ -180,7 +180,7 @@ nvim_mk_augroup_command(
   return n;
 }
 
-// lua helpers
+// lua callers
 #define LUA_PCALL(L, in, out) ASSERT(L, lua_pcall(L, in, out, 0) == 0)
 
 #define LUA_PCALL_VOID(L, in, out) do { \
@@ -188,6 +188,19 @@ nvim_mk_augroup_command(
   lua_pop(L, 1); \
 } while(0)
 
+#define LUA_COLON_PCALL(L, f, in, out) do { \
+  lua_pushvalue(L, -1); \
+  lua_getfield(L, -1, f); \
+  lua_insert(L, -2); \
+  LUA_PCALL(L, in, out); \
+} while(0)
+
+#define LUA_COLON_PCALL_VOID(L, f, in, out) do { \
+  LUA_COLON_PCALL(L, f, in, out); \
+  lua_pop(L, 1); \
+} while(0)
+
+// lua plugins
 #define LUA_REQUIRE(L, name) do { \
   lua_getglobal(L, "require"); \
   lua_pushstring(L, name); \
@@ -206,18 +219,36 @@ nvim_mk_augroup_command(
   lua_getfield(L, -1, "add"); \
 } while(0)
 
-#define LUA_KV_SET_STR(L, k, v) do { \
+// lua kv
+#define LUA_SET_KV(L) lua_settable(L, -3)
+
+#define LUA_PUSH_KV(L, k, tv, v) do { \
   lua_pushstring(L, k); \
-  lua_pushstring(L, v); \
-  lua_settable(L, -3); \
-} while(0)
-
-#define LUA_KV_SET_TYPE(L, tk, k, tv, v) do { \
-  lua_push##tk(L, k); \
   lua_push##tv(L, v); \
-  lua_settable(L, -3); \
+  LUA_SET_KV(L); \
 } while(0)
 
+#define LUA_PUSH_KV_IDX(L, k, tv, v) do { \
+  lua_pushstring(L, k); \
+  lua_createtable(L, 1, 0); { LUA_PUSH_IDX(L, tv, v, 1); } \
+  LUA_SET_KV(L); \
+} while(0)
+
+#define LUA_PUSH_KV_KV(L, k1, k2, tv, v) do { \
+  lua_pushstring(L, k1); \
+  lua_createtable(L, 1, 0); { LUA_PUSH_KV(L, k2, tv, v); } \
+  LUA_SET_KV(L); \
+} while(0)
+
+// lua idx
+#define LUA_SET_IDX(L, i) lua_rawseti(L, -2, i)
+
+#define LUA_PUSH_IDX(L, tv, v, i) do { \
+  lua_push##tv(L, v); \
+  LUA_SET_IDX(L, i); \
+} while(0)
+
+// lua debug
 static inline void
 lua_stack_dump(
     lua_State *L)
@@ -419,8 +450,7 @@ completer(
     }
 
     lua_createtable(L, 1, 0);
-    lua_pushstring(L, "nonsense");
-    lua_rawseti(L, -2, 1);
+    LUA_PUSH_IDX(L, string, "nonsense", 1);
     return 1;
   }
 
@@ -461,34 +491,26 @@ luaopen_config(
   nvim_set_o(L, "runtimepath",
       nvim_mk_obj_string_from_slice(string_arena.buffer, string_arena.length));
 
+  // setup plugin_path for mini.nvim
+  ASSERT(L, copy_alloc_arena(&string_arena, (uint8_t *)g_mini_plugin_dir, sizeof(g_mini_plugin_dir) - 1));
+
   // try installing mini.deps
+  if(!os_isdir(plugin_path))
   {
-    uint reset_delta_len = string_arena.length; // for later reset
+    ASSERT(L, replace_range_arena(
+          &string_arena,
+          0, plugin_path - string_arena.buffer,
+          (uint8_t *)g_install_mini_nvim_command, sizeof(g_install_mini_nvim_command) - 1));
 
-    // setup plugin_path for mini.nvim
-    ASSERT(L, copy_alloc_arena(&string_arena, (uint8_t *)g_mini_plugin_dir, sizeof(g_mini_plugin_dir) - 1));
-    reset_delta_len -= string_arena.length;
+    plugin_path = string_arena.buffer + sizeof(g_install_mini_nvim_command) - 1;
 
-    if(!os_isdir(plugin_path))
-    {
-      ASSERT(L, replace_range_arena(
-            &string_arena,
-            0, plugin_path - string_arena.buffer,
-            (uint8_t *)g_install_mini_nvim_command, sizeof(g_install_mini_nvim_command) - 1));
-
-      plugin_path = string_arena.buffer + sizeof(g_install_mini_nvim_command) - 1;
-
-      // null terminate
-      ASSERT(L, string_arena.length < string_arena.capacity);
-      string_arena.buffer[string_arena.length] = 0;
-
-      system(string_arena.buffer);
-    }
-
-    // remove mini.nvim from plugin_path
-    string_arena.length += reset_delta_len;
+    // null terminate
+    ASSERT(L, string_arena.length < string_arena.capacity);
     string_arena.buffer[string_arena.length] = 0;
+
+    system(string_arena.buffer);
   }
+  clear_arena(&string_arena);
 
   /* PRE OPTIONS */
   nvim_set_g(L, "mapleader", nvim_mk_obj_string(" "));
@@ -565,25 +587,24 @@ luaopen_config(
   /* SETUP THE PACKAGE MANAGER */
   // require the package manager
   do_cmdline_cmd("packadd mini.nvim | helptags ALL");
-  {
-    LUA_REQUIRE_SETUP(L, "mini.deps");
-    lua_createtable(L, 1, 0); {
-      lua_pushstring(L, "path");
-      lua_createtable(L, 0, 1); {
-        lua_pushstring(L, "package");
-        lua_pushlstring(L, plugin_path, plugin_path_len);
-        lua_settable(L, -3);
-      }
-      lua_settable(L, -3);
+
+  LUA_REQUIRE_SETUP(L, "mini.deps");
+  lua_createtable(L, 1, 0); {
+    lua_pushstring(L, "path");
+    lua_createtable(L, 0, 1); {
+      lua_pushstring(L, "package");
+      lua_pushlstring(L, plugin_path, plugin_path_len);
+      LUA_SET_KV(L);
     }
-    LUA_PCALL_VOID(L, 1, 0);
+    LUA_SET_KV(L);
   }
+  LUA_PCALL_VOID(L, 1, 0);
 
   /* download stuff */
   // mini
   LUA_REQUIRE_SETUP(L, "mini.ai");
   lua_createtable(L, 0, 1); {
-    LUA_KV_SET_TYPE(L, string, "n_lines", integer, 500);
+    LUA_PUSH_KV(L, "n_lines", integer, 500);
   }
   LUA_PCALL_VOID(L, 1, 0);
 
@@ -611,14 +632,14 @@ luaopen_config(
   // Detect Tabbing
   LUA_MINIDEPS_ADD(L);
   lua_createtable(L, 0, 1); {
-    LUA_KV_SET_STR(L, "source", "tpope/vim-sleuth");
+    LUA_PUSH_KV(L, "source", string, "tpope/vim-sleuth");
   }
   LUA_PCALL_VOID(L, 1, 0);
 
   // Git Signs
   LUA_MINIDEPS_ADD(L);
   lua_createtable(L, 0, 1); {
-    LUA_KV_SET_STR(L, "source", "lewis6991/gitsigns.nvim");
+    LUA_PUSH_KV(L, "source", string, "lewis6991/gitsigns.nvim");
   }
   LUA_PCALL_VOID(L, 1, 0);
 
@@ -626,37 +647,13 @@ luaopen_config(
   lua_createtable(L, 0, 1); {
     lua_pushstring(L, "signs");
     lua_createtable(L, 0, 5); {
-      lua_pushstring(L, "add");
-      lua_createtable(L, 0, 1); {
-        LUA_KV_SET_STR(L, "text", "+");
-      }
-      lua_settable(L, -3);
-
-      lua_pushstring(L, "change");
-      lua_createtable(L, 0, 1); {
-        LUA_KV_SET_STR(L, "text", "~");
-      }
-      lua_settable(L, -3);
-
-      lua_pushstring(L, "delete");
-      lua_createtable(L, 0, 1); {
-        LUA_KV_SET_STR(L, "text", "_");
-      }
-      lua_settable(L, -3);
-
-      lua_pushstring(L, "topdelete");
-      lua_createtable(L, 0, 1); {
-        LUA_KV_SET_STR(L, "text", "‾");
-      }
-      lua_settable(L, -3);
-
-      lua_pushstring(L, "changedelete");
-      lua_createtable(L, 0, 1); {
-        LUA_KV_SET_STR(L, "text", "~");
-      }
-      lua_settable(L, -3);
+      LUA_PUSH_KV_KV(L, "add", "text", string, "+");
+      LUA_PUSH_KV_KV(L, "change", "text", string, "~");
+      LUA_PUSH_KV_KV(L, "delete", "text", string, "_");
+      LUA_PUSH_KV_KV(L, "topdelete", "text", string, "‾");
+      LUA_PUSH_KV_KV(L, "changedelete", "text", string, "~");
     }
-    lua_settable(L, -3);
+    LUA_SET_KV(L);
   }
   LUA_PCALL_VOID(L, 1, 0);
 
@@ -667,7 +664,7 @@ luaopen_config(
   // File Explorer
   LUA_MINIDEPS_ADD(L);
   lua_createtable(L, 0, 1); {
-    LUA_KV_SET_STR(L, "source", "stevearc/oil.nvim");
+    LUA_PUSH_KV(L, "source", string, "stevearc/oil.nvim");
   }
   LUA_PCALL_VOID(L, 1, 0);
 
@@ -685,33 +682,28 @@ luaopen_config(
           i < (int)STATIC_ARRAY_SIZE(nvim_oil_columns);
           i++)
       {
-        lua_pushstring(L, nvim_oil_columns[i]);
-        lua_rawseti(L, -2, i + 1);
+        LUA_PUSH_IDX(L, string, nvim_oil_columns[i], i + 1);
       }
     }
-    lua_settable(L, -3);
+    LUA_SET_KV(L);
 
-    LUA_KV_SET_TYPE(L, string, "natural_order", boolean, true);
-    LUA_KV_SET_TYPE(L, string, "delete_to_trash", boolean, true);
+    LUA_PUSH_KV(L, "natural_order", boolean, true);
+    LUA_PUSH_KV(L, "delete_to_trash", boolean, true);
 
-    lua_pushstring(L, "view_options");
-    lua_createtable(L, 0, 1); {
-      LUA_KV_SET_TYPE(L, string, "icon", boolean, true);
-    }
-    lua_settable(L, -3);
+    LUA_PUSH_KV_KV(L, "view_options", "icon", boolean, true);
 
     lua_pushstring(L, "keymaps");
     lua_createtable(L, 0, 8); {
-      LUA_KV_SET_STR(L, "g?", "actions.show_help");
-      LUA_KV_SET_STR(L, "<CR>", "actions.select");
-      LUA_KV_SET_STR(L, "L", "actions.select");
-      LUA_KV_SET_STR(L, "H", "actions.parent");
-      LUA_KV_SET_STR(L, "<C-c>", "actions.close");
-      LUA_KV_SET_STR(L, "<C-l>", "actions.refresh");
-      LUA_KV_SET_STR(L, "g.", "actions.toggle_hidden");
-      LUA_KV_SET_STR(L, "g\\", "actions.toggle_trash");
+      LUA_PUSH_KV(L, "g?", string, "actions.show_help");
+      LUA_PUSH_KV(L, "<CR>", string, "actions.select");
+      LUA_PUSH_KV(L, "L", string, "actions.select");
+      LUA_PUSH_KV(L, "H", string, "actions.parent");
+      LUA_PUSH_KV(L, "<C-c>", string, "actions.close");
+      LUA_PUSH_KV(L, "<C-l>", string, "actions.refresh");
+      LUA_PUSH_KV(L, "g.", string, "actions.toggle_hidden");
+      LUA_PUSH_KV(L, "g\\", string, "actions.toggle_trash");
     }
-    lua_settable(L, -3);
+    LUA_SET_KV(L);
   }
   LUA_PCALL_VOID(L, 1, 0);
 
@@ -720,13 +712,8 @@ luaopen_config(
   // Visual Undo Tree
   LUA_MINIDEPS_ADD(L);
   lua_createtable(L, 0, 2); {
-    LUA_KV_SET_STR(L, "source", "jiaoshijie/undotree");
-    lua_pushstring(L, "depends");
-    lua_createtable(L, 1, 0); {
-      lua_pushstring(L, "nvim-lua/plenary.nvim");
-      lua_rawseti(L, -2, 1);
-    }
-    lua_settable(L, -3);
+    LUA_PUSH_KV(L, "source", string, "jiaoshijie/undotree");
+    LUA_PUSH_KV_IDX(L, "depends", string, "nvim-lua/plenary.nvim");
   }
   LUA_PCALL_VOID(L, 1, 0);
 
@@ -737,35 +724,35 @@ luaopen_config(
   // Show Keybinds
   LUA_MINIDEPS_ADD(L);
   lua_createtable(L, 0, 2); {
-    LUA_KV_SET_STR(L, "source", "folke/which-key.nvim");
+    LUA_PUSH_KV(L, "source", string, "folke/which-key.nvim");
   }
   LUA_PCALL_VOID(L, 1, 0);
 
   LUA_REQUIRE_SETUP(L, "which-key");
   lua_createtable(L, 0, 2); {
-    LUA_KV_SET_TYPE(L, string, "delay", integer, 300);
+    LUA_PUSH_KV(L, "delay", integer, 300);
   }
   LUA_PCALL_VOID(L, 1, 0);
 
   LUA_MINIDEPS_ADD(L);
   lua_createtable(L, 0, 2); {
-    LUA_KV_SET_STR(L, "source", "nvim-telescope/telescope.nvim");
+    LUA_PUSH_KV(L, "source", string, "nvim-telescope/telescope.nvim");
 
     lua_pushstring(L, "depends");
     lua_createtable(L, 2, 0); {
       lua_createtable(L, 0, 1); {
-        LUA_KV_SET_STR(L, "source", "nvim-lua/plenary.nvim");
+        LUA_PUSH_KV(L, "source", string, "nvim-lua/plenary.nvim");
       }
-      lua_rawseti(L, -2, 1);
+      LUA_SET_IDX(L, 1);
 
       lua_createtable(L, 0, 3); {
-        LUA_KV_SET_STR(L, "source", "nvim-telescope/telescope-fzf-native.nvim");
-        LUA_KV_SET_STR(L, "build", "make");
-        LUA_KV_SET_STR(L, "cond", "function() return vim.fn.executable 'make' == 1 end"); // WARN: idk if that worked
+        LUA_PUSH_KV(L, "source", string, "nvim-telescope/telescope-fzf-native.nvim");
+        LUA_PUSH_KV(L, "build", string, "make");
+        LUA_PUSH_KV(L, "cond", string, "function() return vim.fn.executable 'make' == 1 end"); // WARN: idk if that worked
       }
-      lua_rawseti(L, -2, 2);
+      LUA_SET_IDX(L, 2);
     }
-    lua_settable(L, -3);
+    LUA_SET_KV(L);
   }
   LUA_PCALL_VOID(L, 1, 0);
 
@@ -783,40 +770,32 @@ luaopen_config(
   // QOL Improvements for marks
   LUA_MINIDEPS_ADD(L);
   lua_createtable(L, 0, 1); {
-    LUA_KV_SET_STR(L, "source", "chentoast/marks.nvim");
+    LUA_PUSH_KV(L, "source", string, "chentoast/marks.nvim");
   }
   LUA_PCALL_VOID(L, 1, 0);
 
   LUA_REQUIRE_SETUP(L, "marks");
   lua_createtable(L, 0, 1); {
-    LUA_KV_SET_TYPE(L, string, "default_mappings", boolean, true);
+    LUA_PUSH_KV(L, "default_mappings", boolean, true);
 
     lua_pushstring(L, "mappings");
     lua_createtable(L, 0, 0);
-    lua_settable(L, -3);
+    LUA_SET_KV(L);
   }
   LUA_PCALL_VOID(L, 1, 0);
 
   // Jump To Files
   LUA_MINIDEPS_ADD(L);
   lua_createtable(L, 0, 3); {
-    LUA_KV_SET_STR(L, "source", "ThePrimeagen/harpoon");
-    LUA_KV_SET_STR(L, "checkout", "harpoon2");
+    LUA_PUSH_KV(L, "source", string, "ThePrimeagen/harpoon");
+    LUA_PUSH_KV(L, "checkout", string, "harpoon2");
 
-    lua_pushstring(L, "depends");
-    lua_createtable(L, 1, 0); {
-      lua_pushstring(L, "nvim-lua/plenary.nvim");
-      lua_rawseti(L, -2, 1);
-    }
-    lua_settable(L, -3);
+    LUA_PUSH_KV_IDX(L, "depends", string, "nvim-lua/plenary.nvim");
   }
-  LUA_PCALL(L, 1, 0);
+  LUA_PCALL_VOID(L, 1, 0);
 
   LUA_REQUIRE(L, "harpoon");
-  lua_pushvalue(L, -1);
-  lua_getfield(L, -1, "setup");
-  lua_insert(L, -2);
-  LUA_PCALL_VOID(L, 1, 0);
+  LUA_COLON_PCALL_VOID(L, "setup", 1, 0);
 
   nvim_map(L, "n", "<M-m>", "<cmd>lua require('harpoon'):list():add()<cr>");
   nvim_map(L, "n", "<leader>hm", "<cmd>lua require('harpoon'):list():add()<cr>");
@@ -836,117 +815,126 @@ luaopen_config(
   // Auto Format
   LUA_MINIDEPS_ADD(L);
   lua_createtable(L, 0, 1); {
-    LUA_KV_SET_STR(L, "source", "stevearc/conform.nvim");
+    LUA_PUSH_KV(L, "source", string, "stevearc/conform.nvim");
   }
   LUA_PCALL_VOID(L, 1, 0);
-do_cmdline_cmd("lua require('conform').setup { \
-  formatters_by_ft = { \
-    c = { 'clang-format' }, \
-    cpp = { 'clang-format' }, \
-    clojure = { 'cljfmt' }, \
-    haskell = { 'fourmolu', 'ormolu', stop_after_first = true }, \
-    html = { 'prettier' }, \
-    java = { 'google-java-format' }, \
-    lua = { 'stylua' }, \
-    odin = { 'odinfmt' }, \
-    purescript = { 'purescript-tidy' }, \
-    python = function(bufnr) \
-      if require('conform').get_formatter_info('ruff_format', bufnr).available then \
-        return { 'ruff_format' } \
-      else \
-        return { 'isort', 'black' } \
-      end \
-    end, \
-    rust = { 'rustfmt' }, \
-    cs = { 'csharpier' }, \
-    typescript = { 'biome' }, \
-    javascript = { 'biome' }, \
-  }, \
-  formatters = { \
-    odinfmt = { \
-      --[[ Change where to find the command if it isn't in your path.]] \
-      command = 'odinfmt', \
-      args = { '-stdin' }, \
-      stdin = true, \
-    }, \
-  }, \
-}");
+
+  LUA_REQUIRE_SETUP(L, "conform");
+  lua_createtable(L, 0, 2); {
+    lua_pushstring(L, "formatters_by_ft");
+    lua_createtable(L, 0, 14); {
+      LUA_PUSH_KV_IDX(L, "c", string, "clang-format");
+      LUA_PUSH_KV_IDX(L, "cpp", string, "clang-format");
+      LUA_PUSH_KV_IDX(L, "odin", string, "odinfmt");
+      LUA_PUSH_KV_IDX(L, "rust", string, "rustfmt");
+
+      lua_pushstring(L, "haskell");
+      lua_createtable(L, 2, 1); {
+        LUA_PUSH_IDX(L, string, "fourmolu", 1);
+        LUA_PUSH_IDX(L, string, "ormolu", 2);
+        LUA_PUSH_KV(L, "stop_after_first", boolean, true);
+      }
+      LUA_SET_KV(L);
+
+      LUA_PUSH_KV_IDX(L, "clojure", string, "cljfmt");
+      LUA_PUSH_KV_IDX(L, "java", string, "google-java-format");
+      LUA_PUSH_KV_IDX(L, "cs", string, "csharpier");
+      LUA_PUSH_KV_IDX(L, "lua", string, "stylua");
+      LUA_PUSH_KV_IDX(L, "purescript", string, "purescript-tidy");
+      LUA_PUSH_KV_IDX(L, "html", string, "prettier");
+      LUA_PUSH_KV_IDX(L, "typescript", string, "biome");
+      LUA_PUSH_KV_IDX(L, "javascript", string, "biome");
+
+      /* TODO: function for python conform
+      python = function(bufnr)
+        if require('conform').get_formatter_info('ruff_format', bufnr).available then
+          return { 'ruff_format' }
+        else
+          return { 'isort', 'black' }
+        end
+      end,
+      */
+    }
+    LUA_SET_KV(L);
+
+    lua_pushstring(L, "formatters");
+    lua_createtable(L, 0, 1); {
+      lua_pushstring(L, "odinfmt");
+      lua_createtable(L, 0, 1); {
+        LUA_PUSH_KV(L, "command", string, "odinfmt");
+        LUA_PUSH_KV(L, "stdin", boolean, true);
+
+        lua_pushstring(L, "args");
+        lua_createtable(L, 1, 0); { LUA_PUSH_IDX(L, string, "odinfmt", 1); }
+        LUA_SET_KV(L);
+      }
+      LUA_SET_KV(L);
+    }
+    LUA_SET_KV(L);
+  }
+  LUA_PCALL_VOID(L, 1, 0);
+
   nvim_map(L, "n", "<leader>cf", "<cmd>require('conform').format({ async = true, lsp_format = 'fallback' })<cr>");
 
   // Text Semantics Engine
   LUA_MINIDEPS_ADD(L);
   lua_createtable(L, 0, 2); {
-    LUA_KV_SET_STR(L, "source", "nvim-treesitter/nvim-treesitter");
+    LUA_PUSH_KV(L, "source", string, "nvim-treesitter/nvim-treesitter");
 
     lua_pushstring(L, "hooks");
     lua_createtable(L, 0, 1); {
-      // TODO: LUA_KV_SET_STR(L, "post_checkout", "function() vim.cmd('TSUpdate') end");
+      // TODO: LUA_PUSH_KV(L, "post_checkout", string, "function() vim.cmd('TSUpdate') end");
     }
-    lua_settable(L, -3);
+    LUA_SET_KV(L);
   }
   LUA_PCALL_VOID(L, 1, 0);
 
   LUA_REQUIRE_SETUP(L, "nvim-treesitter");
   lua_createtable(L, 0, 1); {
-    LUA_KV_SET_TYPE(L, string, "auto_install", boolean, true);
-
-    lua_pushstring(L, "highlight");
-    lua_createtable(L, 0, 1); {
-      LUA_KV_SET_TYPE(L, string, "enable", boolean, false);
-    }
-    lua_settable(L, -3);
-
-    lua_pushstring(L, "indent");
-    lua_createtable(L, 0, 1); {
-      LUA_KV_SET_TYPE(L, string, "enable", boolean, false);
-    }
-    lua_settable(L, -3);
+    LUA_PUSH_KV(L, "auto_install", boolean, true);
+    LUA_PUSH_KV_KV(L, "highlight", "enable", boolean, false);
+    LUA_PUSH_KV_KV(L, "indent", "enable", boolean, false);
   }
   LUA_PCALL_VOID(L, 1, 0);
-  // TODO: auto build
 
   // Highlight Special Comments
   LUA_MINIDEPS_ADD(L);
   lua_createtable(L, 0, 2); {
-    LUA_KV_SET_STR(L, "source", "folke/todo-comments.nvim");
+    LUA_PUSH_KV(L, "source", string, "folke/todo-comments.nvim");
 
-    lua_pushstring(L, "depends");
-    lua_createtable(L, 1, 0); {
-      lua_pushstring(L, "nvim-lua/plenary.nvim");
-      lua_rawseti(L, -2, 1);
-    }
-    lua_settable(L, -3);
+    LUA_PUSH_KV_IDX(L, "depends", string, "nvim-lua/plenary.nvim");
   }
   LUA_PCALL_VOID(L, 1, 0);
 
-do_cmdline_cmd("lua require('todo-comments').setup { \
-  signs = false, \
-  search = { \
-    pattern = [[\\b(KEYWORDS)(\\([^\\)]*\\))?:]], \
-  }, \
-  highlight = { \
-    before = '', \
-    keyword = 'bg', \
-    after = '', \
-    pattern = [[.*<((KEYWORDS)%(\\(.{-1,}\\))?):]], \
-  }, \
-}");
+  LUA_REQUIRE_SETUP(L, "todo-comments");
+  lua_createtable(L, 0, 3); {
+    LUA_PUSH_KV(L, "signs", boolean, true);
+
+    LUA_PUSH_KV_KV(L, "search", "pattern", string, "\\b(KEYWORDS)(\\([^\\)]*\\))?:");
+
+    lua_pushstring(L, "highlight");
+    lua_createtable(L, 0, 1); {
+      LUA_PUSH_KV(L, "before", string, "");
+      LUA_PUSH_KV(L, "keyword", string, "bg");
+      LUA_PUSH_KV(L, "after", string, "");
+      LUA_PUSH_KV(L, "pattern", string, ".*<((KEYWORDS)%(\\(.{-1,}\\))?):");
+    }
+    LUA_SET_KV(L);
+  }
+  LUA_PCALL_VOID(L, 1, 0);
+
   nvim_map(L, "n", "<leader>st", "<cmd>TodoTelescope<cr>");
 
   // Highlight Color Codes
   LUA_MINIDEPS_ADD(L);
   lua_createtable(L, 0, 1); {
-    LUA_KV_SET_STR(L, "source", "catgoose/nvim-colorizer.lua");
+    LUA_PUSH_KV(L, "source", string, "catgoose/nvim-colorizer.lua");
   }
   LUA_PCALL_VOID(L, 1, 0);
 
   LUA_REQUIRE_SETUP(L, "colorizer");
   lua_createtable(L, 0, 1); {
-    lua_pushstring(L, "user_default_options");
-    lua_createtable(L, 0, 1); {
-      LUA_KV_SET_TYPE(L, string, "names", boolean, false);
-    }
-    lua_settable(L, -3);
+    LUA_PUSH_KV_KV(L, "user_default_options", "names", boolean, false);
   }
   LUA_PCALL_VOID(L, 1, 0);
   nvim_map(L, "n", "<leader>uh", "<cmd>Colortils<cr>");
@@ -954,7 +942,7 @@ do_cmdline_cmd("lua require('todo-comments').setup { \
   // Edit Color Codes
   LUA_MINIDEPS_ADD(L);
   lua_createtable(L, 0, 1); {
-    LUA_KV_SET_STR(L, "source", "max397574/colortils.nvim");
+    LUA_PUSH_KV(L, "source", string, "max397574/colortils.nvim");
   }
   LUA_PCALL_VOID(L, 1, 0);
 
@@ -964,14 +952,9 @@ do_cmdline_cmd("lua require('todo-comments').setup { \
   // Theme
   LUA_MINIDEPS_ADD(L);
   lua_createtable(L, 0, 2); {
-    LUA_KV_SET_STR(L, "source", "zenbones-theme/zenbones.nvim");
+    LUA_PUSH_KV(L, "source", string, "zenbones-theme/zenbones.nvim");
 
-    lua_pushstring(L, "depends");
-    lua_createtable(L, 1, 0); {
-      lua_pushstring(L, "rktjmp/lush.nvim");
-      lua_rawseti(L, -2, 1);
-    }
-    lua_settable(L, -3);
+    LUA_PUSH_KV_IDX(L, "depends", string, "rktjmp/lush.nvim");
   }
   LUA_PCALL_VOID(L, 1, 0);
 
