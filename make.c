@@ -82,6 +82,7 @@ main(
   char *debug_flags[] = {
     "-Og",
     "-g",
+    "-DDEBUG",
   };
   size_t debug_flags_len = STATIC_ARRAY_SIZE(debug_flags);
 
