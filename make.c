@@ -102,7 +102,7 @@ main(
   /* get args */
   char *prog_args[ARGS_MAX] = {"/usr/bin/gcc"}; // WARN: max number of args to gcc, i dont think kernel can support more than that lol
   size_t prog_args_len = 1;
-  char *extra_args[ARGS_MAX] = {};
+  char *extra_args[ARGS_MAX] = {0};
   size_t extra_args_len = 0;
   while(argc > 0)
   {

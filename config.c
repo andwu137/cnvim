@@ -96,7 +96,7 @@ nvim_set_o(
     char *key,
     Object val)
 {
-  Dict(option) o = {};
+  Dict(option) o = {0};
   Error e = ERROR_INIT;
   nvim_set_option_value(0, nvim_mk_string(key), val, &o, &e);
   if(e.type != kErrorTypeNone) { PANIC_FMT(L, "ERROR(%d): %s\n", e.type, e.msg); }
@@ -140,10 +140,10 @@ nvim_mk_augroup_callback(
   Arena arena = ARENA_EMPTY; // WARN: I dont know if this lives long enough
   Error e = ERROR_INIT;
 
-  Dict(create_augroup) augroup = {};
+  Dict(create_augroup) augroup = {0};
   PUT_KEY(augroup, create_augroup, clear, augroup_clear);
 
-  Dict(create_autocmd) autocmd = {};
+  Dict(create_autocmd) autocmd = {0};
   PUT_KEY(autocmd, create_autocmd, desc, nvim_mk_string(desc));
   PUT_KEY(autocmd, create_autocmd, group,
       nvim_mk_obj_int(nvim_create_augroup(0, nvim_mk_string(augroup_name), &augroup, &e)));
@@ -166,10 +166,10 @@ nvim_mk_augroup_command(
   Arena arena = ARENA_EMPTY; // WARN: I dont know if this lives long enough
   Error e = ERROR_INIT;
 
-  Dict(create_augroup) augroup = {};
+  Dict(create_augroup) augroup = {0};
   PUT_KEY(augroup, create_augroup, clear, augroup_clear);
 
-  Dict(create_autocmd) autocmd = {};
+  Dict(create_autocmd) autocmd = {0};
   PUT_KEY(autocmd, create_autocmd, desc, nvim_mk_string(desc));
   PUT_KEY(autocmd, create_autocmd, group,
       nvim_mk_obj_int(nvim_create_augroup(0, nvim_mk_string(augroup_name), &augroup, &e)));
@@ -873,7 +873,7 @@ do_cmdline_cmd("lua require('conform').setup { \
 }");
   nvim_map(L, "n", "<leader>cf", "<cmd>require('conform').format({ async = true, lsp_format = 'fallback' })<cr>");
 
-// Text Semantics Engine
+  // Text Semantics Engine
   LUA_MINIDEPS_ADD(L);
   lua_createtable(L, 0, 2); {
     LUA_KV_SET_STR(L, "source", "nvim-treesitter/nvim-treesitter");
@@ -986,12 +986,12 @@ do_cmdline_cmd("lua require('todo-comments').setup { \
 
   // highlights
   {
-    Dict(highlight) hl = {};
+    Dict(highlight) hl = {0};
     PUT_KEY(hl, highlight, bg, nvim_mk_obj_string("#C7CBDB"));
     nvim_highlight(L, "ColorColumn", hl);
   }
   {
-    Dict(highlight) hl = {};
+    Dict(highlight) hl = {0};
     PUT_KEY(hl, highlight, fg, nvim_mk_obj_string("#D0D1D8"));
     nvim_highlight(L, "Whitespace", hl);
   }
