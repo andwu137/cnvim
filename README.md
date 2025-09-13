@@ -15,3 +15,4 @@ Sources:
 - https://github.com/rewhile/CatNvim
 - Build neovim, then grep the files (include the hidden ones in build) for the generated header files
     - Yes, there is a way to link the generated headers directly, but I copy pasted cause I'm weak
+- The Lua C API Reference (get the right version): https://www.lua.org/manual/5.1/

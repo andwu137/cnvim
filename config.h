@@ -1,6 +1,8 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#include <stdint.h>
+
 #if _WIN32
   #include <windows.h>
   #define PATH_MAX MAX_PATH

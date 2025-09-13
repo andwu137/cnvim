@@ -266,6 +266,18 @@ typedef enum {
 #define KEYSET_OPTIDX_highlight__strikethrough 30
 // END
 
+// BEGIN build/src/nvim/auto/keysets_defs.generated.h
+#define KEYSET_OPTIDX_keymap__desc 1
+#define KEYSET_OPTIDX_keymap__expr 2
+#define KEYSET_OPTIDX_keymap__script 3
+#define KEYSET_OPTIDX_keymap__silent 4
+#define KEYSET_OPTIDX_keymap__unique 5
+#define KEYSET_OPTIDX_keymap__nowait 6
+#define KEYSET_OPTIDX_keymap__noremap 7
+#define KEYSET_OPTIDX_keymap__callback 8
+#define KEYSET_OPTIDX_keymap__replace_keycodes 9
+// END
+
 /* API Functions */
 extern int do_cmdline_cmd(const char *cmd);
 
@@ -277,10 +289,12 @@ extern bool os_isdir(const char *name);
 extern char *runtimepath_default(bool clean_arg);
 
 extern void nvim_set_option_value(uint64_t channel_id, String name, Object value, Dict(option) * opts, Error *err);
+extern Object nvim_get_option_value(String name, Dict(option) *opts, Error *err);
 
 extern void nvim_set_var(String name, Object value, Error *err);
 extern void nvim_set_keymap(uint64_t channel_id, String mode, String lhs, String rhs, Dict(keymap) * opts, Error *err);
 extern void nvim_set_hl(uint64_t channel_id, Integer ns_id, String name, Dict(highlight) *val, Error *err);
+extern void nvim_buf_set_keymap(uint64_t channel_id, Buffer buffer, String mode, String lhs, String rhs, Dict(keymap) *opts, Error *err);
 
 extern Buffer nvim_get_current_buf(void);
 extern ArrayOf(String) nvim_buf_get_lines(
