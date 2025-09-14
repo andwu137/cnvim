@@ -932,7 +932,7 @@ luaopen_config(
 
   LUA_REQUIRE_SETUP(L, "todo-comments");
   lua_createtable(L, 0, 3); {
-    LUA_PUSH_KV(L, "signs", boolean, true);
+    LUA_PUSH_KV(L, "signs", boolean, false);
 
     LUA_PUSH_KV_KV(L, "search", "pattern", string, "\\b(KEYWORDS)(\\([^\\)]*\\))?:");
 
