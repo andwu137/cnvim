@@ -18,7 +18,7 @@
 #include "fileio.c"
 
 /* GLOBALS */
-static char const g_package_dir[] = "/site/";
+static char const g_package_dir[] = "site/";
 static char const g_mini_plugin_dir[] = "pack/deps/opt/mini.nvim";
 static char const g_install_mini_nvim_command[] =
   "git clone --filter=blob:none https://github.com/nvim-mini/mini.nvim ";
@@ -998,12 +998,14 @@ luaopen_config(
   lua_pop(L, 1);
   */
 
+  /* // syntax highlighting
   lua_getglobal(L, "vim"); ASSERT(L, lua_istable(L, -1));
   lua_getfield(L, -1, "cmd"); ASSERT(L, lua_istable(L, -1));
   lua_getfield(L, -1, "syntax");
   lua_pushstring(L, "off");
   LUA_PCALL_VOID(L, 1, 0);
   lua_pop(L, 1);
+  */
 
   // highlights
   {
