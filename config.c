@@ -11,6 +11,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#if DEBUG
+#define PERFORMANCE 1
+#endif
+
+#if PERFORMANCE
+#if defined(__linux__)
+#include <time.h>
+#else // __linux__
+#error "OS not supported yet"
+#endif // OS
+#endif // PERFORMANCE
+
 #include "nvim_api.c"
 
 #include "config.h"
@@ -445,6 +457,8 @@ lsp_disable_semantic_highlights(
   {
     nvim_highlight(L, (char *)lua_tostring(L, -1), hl);
   }
+
+  lua_pop(L, 3);
   return 0;
 }
 
@@ -452,11 +466,22 @@ int
 luaopen_config(
     lua_State *L)
 {
+#if PERFORMANCE
+  struct timespec
+    start_time, end_time,
+    start_path_time, end_path_time,
+    start_opt_time, end_opt_time,
+    start_download_time, end_download_time;
+  clock_gettime(CLOCK_MONOTONIC, &start_time);
+
+
+  start_path_time = start_time;
+#endif
   // setup command string creator, useful for temporary strings
   struct Arena string_arena;
   ASSERT(L, init_arena(&string_arena, 4096 * 4)); // arbitrary size
 
-  /* RUNTIME */
+  // RUNTIME
   char *package_path = stdpaths_user_data_subpath(g_package_dir);
   uint package_path_len = strlen(package_path);
   ASSERT(L, package_path_len > 0);
@@ -481,6 +506,7 @@ luaopen_config(
   nvim_set_o(L, "runtimepath",
       nvim_mk_obj_string_from_slice(string_arena.buffer, string_arena.length));
 
+  /* SETUP THE PACKAGE MANAGER */
   // setup plugin_path for mini.nvim
   ASSERT(L, copy_alloc_arena(&string_arena, (uint8_t *)g_mini_plugin_dir, sizeof(g_mini_plugin_dir) - 1));
 
@@ -501,8 +527,27 @@ luaopen_config(
     system(string_arena.buffer);
   }
   clear_arena(&string_arena);
+  // require the package manager
+  do_cmdline_cmd("packadd mini.nvim | helptags ALL");
+  LUA_REQUIRE_SETUP(L, "mini.deps");
+  lua_createtable(L, 1, 0); {
+    lua_pushstring(L, "path");
+    lua_createtable(L, 0, 1); {
+      lua_pushstring(L, "package");
+      lua_pushlstring(L, plugin_path, plugin_path_len);
+      LUA_SET_KV(L);
+    }
+    LUA_SET_KV(L);
+  }
+  LUA_PCALL_VOID(L, 1, 0);
 
-  /* PRE OPTIONS */
+#if PERFORMANCE
+  clock_gettime(CLOCK_MONOTONIC, &end_path_time);
+
+  start_opt_time = end_path_time;
+#endif
+
+  /* OPTIONS */
   nvim_set_g(L, "mapleader", nvim_mk_obj_string(" "));
   nvim_set_g(L, "maplocalleader", nvim_mk_obj_string(","));
 
@@ -583,23 +628,78 @@ luaopen_config(
 
   nvim_set_o(L, "completeopt", nvim_mk_obj_string("longest"));
 
-  /* SETUP THE PACKAGE MANAGER */
-  // require the package manager
-  do_cmdline_cmd("packadd mini.nvim | helptags ALL");
+  /* Keymaps */
+  // Auto Completion
+  nvim_map(L, "i", "<c-space>", "<c-x><c-u>");
 
-  LUA_REQUIRE_SETUP(L, "mini.deps");
-  lua_createtable(L, 1, 0); {
-    lua_pushstring(L, "path");
-    lua_createtable(L, 0, 1); {
-      lua_pushstring(L, "package");
-      lua_pushlstring(L, plugin_path, plugin_path_len);
-      LUA_SET_KV(L);
-    }
-    LUA_SET_KV(L);
-  }
-  LUA_PCALL_VOID(L, 1, 0);
+  // Terminal Binds
+  nvim_map(L, "t", "<C-w>", "<c-\\><c-n>");
 
-  /* download stuff */
+  // Navigation
+  /// Center Screen When Scrolling
+  nvim_map(L, "n", "<C-d>", "<C-d>zz");
+  nvim_map(L, "n", "<C-u>", "<C-u>zz");
+
+  /// Navigate Wrapped Lines
+  nvim_map(L, "n", "j", "gj");
+  nvim_map(L, "n", "k", "gk");
+
+  // Yanks
+  nvim_map(L, "n", "<leader>y", "\"+y");
+  nvim_map(L, "v", "<leader>y", "\"+y");
+  nvim_map(L, "n", "<leader>Y", "\"+Y");
+
+  // Set highlight on search, but clear on pressing <Esc> in normal mode
+  nvim_set_o(L, "hlsearch", nvim_mk_obj_bool(true));
+  nvim_map(L, "n", "<esc>", "<cmd>nohlsearch<cr><esc>");
+
+  // Diagnostics
+  NVIM_MAP_CMD(L, "n", "<leader>uq", "copen");
+  NVIM_MAP_CMD(L, "n", "<leader>ul", "lopen");
+
+  // Code
+  NVIM_MAP_CMD(L, "n", "<leader>cw", "cd %:p:h"); // move nvim base path to current buffer
+  NVIM_MAP_CMD(L, "n", "<leader>cm", "Man");
+  NVIM_MAP_CMD(L, "n", "<leader>cW", "s/\\s\\+$//g"); // remove trailing whitespace
+
+  // Make
+  NVIM_MAP_CMD(L, "n", "<leader>mm", "make");
+  NVIM_MAP_CMD(L, "n", "<leader>mc",
+    "lua vim.ui.input({ prompt = 'Make Command: ', default = vim.o.makeprg }, "
+      "function(usr_input) vim.o.makeprg = usr_input end)");
+
+  // UI
+  NVIM_MAP_CMD(L, "n", "<leader>um", "messages");
+
+  // Toggle
+  NVIM_MAP_CMD(L, "n", "<leader>th", "ColorizerToggle");
+
+  // Panes
+  NVIM_MAP_CMD(L, "n", "<leader>v", "vsp");
+  NVIM_MAP_CMD(L, "n", "<leader>pv", "vsp");
+  NVIM_MAP_CMD(L, "n", "<leader>x", "sp");
+  NVIM_MAP_CMD(L, "n", "<leader>px", "sp");
+  NVIM_MAP_CMD(L, "n", "<leader>pt", "tab split");
+
+  NVIM_MAP_CMD(L, "n", "<leader>p|", "vertical resize");
+  NVIM_MAP_CMD(L, "n", "<leader>p_", "horizontal resize");
+  NVIM_MAP_CMD(L, "n", "<leader>pZ", "wincmd =");
+  nvim_map(L, "n", "<leader>pz", "<cmd>horizontal resize<cr><cmd>vertical resize<cr>");
+
+  NVIM_MAP_CMD(L, "n", "<leader>pN", "setlocal buftype=nofile"); // turn off ability to save
+  /* End Keymaps */
+
+  // Highlight when yanking (copying) text
+  nvim_mk_augroup_command(L, "TextYankPost", "Highlight when yanking text", "my-highlight-yank", true,
+      nvim_mk_string("lua vim.highlight.on_yank({ on_visual = false })"));
+
+#if PERFORMANCE
+  clock_gettime(CLOCK_MONOTONIC, &end_opt_time);
+
+  start_download_time = end_opt_time;
+#endif
+
+  /* Download Packages */
   // mini
   LUA_REQUIRE_SETUP(L, "mini.ai");
   lua_createtable(L, 0, 1); {
@@ -980,7 +1080,17 @@ luaopen_config(
   }
   LUA_PCALL_VOID(L, 1, 0);
 
-  nvim_set_o(L, "background", nvim_mk_obj_string("light"));
+  // highlights
+  {
+    Dict(highlight) hl = {0};
+    PUT_KEY(hl, highlight, bg, nvim_mk_obj_string("#C7CBDB"));
+    nvim_highlight(L, "ColorColumn", hl);
+  }
+  {
+    Dict(highlight) hl = {0};
+    PUT_KEY(hl, highlight, fg, nvim_mk_obj_string("#D0D1D8"));
+    nvim_highlight(L, "Whitespace", hl);
+  }
 
   // TODO: nvim_set_g("tokyobones", = {
   //   lightness = 'bright',
@@ -988,8 +1098,10 @@ luaopen_config(
   //   darken_comments = 45,
   // });
 
-  /*
-  // colorscheme
+  // Themeing
+  nvim_set_o(L, "background", nvim_mk_obj_string("light"));
+
+  /* colorscheme
   lua_getglobal(L, "vim"); ASSERT(L, lua_istable(L, -1));
   lua_getfield(L, -1, "cmd"); ASSERT(L, lua_istable(L, -1));
   lua_getfield(L, -1, "colorscheme");
@@ -1007,84 +1119,36 @@ luaopen_config(
   lua_pop(L, 1);
   */
 
-  // highlights
+#if PERFORMANCE
+  clock_gettime(CLOCK_MONOTONIC, &end_download_time);
+
+  clock_gettime(CLOCK_MONOTONIC, &end_time);
   {
-    Dict(highlight) hl = {0};
-    PUT_KEY(hl, highlight, bg, nvim_mk_obj_string("#C7CBDB"));
-    nvim_highlight(L, "ColorColumn", hl);
+    char out_buf[4096] = {0};
+    snprintf(out_buf, sizeof(out_buf),
+        "time took: %ld.%09ld\n"
+        "\tpath time took    : %ld.%09ld\n"
+        "\topt time took     : %ld.%09ld\n"
+        "\tdownload time took: %ld.%09ld\n",
+        end_time.tv_sec - start_time.tv_sec,
+        end_time.tv_nsec - start_time.tv_nsec,
+
+        end_path_time.tv_sec - start_path_time.tv_sec,
+        end_path_time.tv_nsec - start_path_time.tv_nsec,
+
+        end_opt_time.tv_sec - start_opt_time.tv_sec,
+        end_opt_time.tv_nsec - start_opt_time.tv_nsec,
+
+        end_download_time.tv_sec - start_download_time.tv_sec,
+        end_download_time.tv_nsec - start_download_time.tv_nsec);
+    lua_getglobal(L, "vim");
+    lua_getfield(L, -1, "print");
+    lua_pushstring(L, out_buf);
+    LUA_PCALL_VOID(L, 1, 0);
   }
-  {
-    Dict(highlight) hl = {0};
-    PUT_KEY(hl, highlight, fg, nvim_mk_obj_string("#D0D1D8"));
-    nvim_highlight(L, "Whitespace", hl);
-  }
 
-
-  /* POST OPTIONS */
-  /* Keymaps */
-  // Auto Completion
-  nvim_map(L, "i", "<c-space>", "<c-x><c-u>");
-
-  // Terminal Binds
-  nvim_map(L, "t", "<C-w>", "<c-\\><c-n>");
-
-  // Navigation
-  /// Center Screen When Scrolling
-  nvim_map(L, "n", "<C-d>", "<C-d>zz");
-  nvim_map(L, "n", "<C-u>", "<C-u>zz");
-
-  /// Navigate Wrapped Lines
-  nvim_map(L, "n", "j", "gj");
-  nvim_map(L, "n", "k", "gk");
-
-  // Yanks
-  nvim_map(L, "n", "<leader>y", "\"+y");
-  nvim_map(L, "v", "<leader>y", "\"+y");
-  nvim_map(L, "n", "<leader>Y", "\"+Y");
-
-  // Set highlight on search, but clear on pressing <Esc> in normal mode
-  nvim_set_o(L, "hlsearch", nvim_mk_obj_bool(true));
-  nvim_map(L, "n", "<esc>", "<cmd>nohlsearch<cr><esc>");
-
-  // Diagnostics
-  NVIM_MAP_CMD(L, "n", "<leader>uq", "copen");
-  NVIM_MAP_CMD(L, "n", "<leader>ul", "lopen");
-
-  // Code
-  NVIM_MAP_CMD(L, "n", "<leader>cw", "cd %:p:h"); // move nvim base path to current buffer
-  NVIM_MAP_CMD(L, "n", "<leader>cm", "Man");
-  NVIM_MAP_CMD(L, "n", "<leader>cW", "s/\\s\\+$//g"); // remove trailing whitespace
-
-  // Make
-  NVIM_MAP_CMD(L, "n", "<leader>mm", "make");
-  NVIM_MAP_CMD(L, "n", "<leader>mc",
-    "lua vim.ui.input({ prompt = 'Make Command: ', default = vim.o.makeprg }, "
-      "function(usr_input) vim.o.makeprg = usr_input end)");
-
-  // UI
-  NVIM_MAP_CMD(L, "n", "<leader>um", "messages");
-
-  // Toggle
-  NVIM_MAP_CMD(L, "n", "<leader>th", "ColorizerToggle");
-
-  // Panes
-  NVIM_MAP_CMD(L, "n", "<leader>v", "vsp");
-  NVIM_MAP_CMD(L, "n", "<leader>pv", "vsp");
-  NVIM_MAP_CMD(L, "n", "<leader>x", "sp");
-  NVIM_MAP_CMD(L, "n", "<leader>px", "sp");
-  NVIM_MAP_CMD(L, "n", "<leader>pt", "tab split");
-
-  NVIM_MAP_CMD(L, "n", "<leader>p|", "vertical resize");
-  NVIM_MAP_CMD(L, "n", "<leader>p_", "horizontal resize");
-  NVIM_MAP_CMD(L, "n", "<leader>pZ", "wincmd =");
-  nvim_map(L, "n", "<leader>pz", "<cmd>horizontal resize<cr><cmd>vertical resize<cr>");
-
-  NVIM_MAP_CMD(L, "n", "<leader>pN", "setlocal buftype=nofile"); // turn off ability to save
-  /* End Keymaps */
-
-  // Highlight when yanking (copying) text
-  nvim_mk_augroup_command(L, "TextYankPost", "Highlight when yanking text", "my-highlight-yank", true,
-      nvim_mk_string("lua vim.highlight.on_yank({ on_visual = false })"));
+  lua_stack_dump(L);
+#endif
 
   /* EXIT */
   deinit_arena(&string_arena);

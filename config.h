@@ -24,7 +24,11 @@ typedef unsigned int uint;
 
 #define PANIC_FMT(L, fmt, ...) luaL_error(L, fmt FILE_POS, __VA_ARGS__)
 #define PANIC(L, msg) luaL_error(L, "ERROR: " FILE_POS msg)
+#if DEBUG
 #define ASSERT(L, b) do { if(!(b)) { PANIC(L, "assert(" STRINGIFY(b) ")"); } } while(0)
+#else
+#define ASSERT(L, b) (void)(b)
+#endif
 
 #define STATIC_ARRAY_SIZE(arr) (sizeof(arr) / sizeof(*arr))
 
