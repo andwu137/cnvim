@@ -2,12 +2,20 @@ This project is purely for fun (it was not fun), it will probably break on other
 
 I tested this on `nvim-v0.11.3`, `luajit-5.1`.
 
+Build Requires:
+- `gcc` or `any other C compiler that supports this relatively standard C`
+- `luajit` <!-- C development headers -->
+- `pkg-config` <!-- get flags for compiler -->
+
+Requires:
+- `neovim` <!-- duh -->
+
 My compilation steps are (and this could be specific to my machine):
 ```bash
 git clone https://github.com/andwu137/cnvim.git
 gcc -Wall -Wextra -Wpedantic -O3 -march=native make.c -o make_c
-./make_c -I/usr/include/luajit-2.1/ -lluajit-5.1 release
-# or on systems with bash, use ./make.sh
+./make_c release
+# or on my computer, use ./make.sh
 ```
 
 Sources:

@@ -2,14 +2,26 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <unistd.h>
+#include <ctype.h>
 #include <errno.h>
+#include <limits.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 /* macros */
 #define PROGRAM "make_c"
-#define PANIC_FMT(fmt, ...) { fprintf(stderr, PROGRAM ": ERROR: " fmt, __VA_ARGS__); exit(-1); }
-#define PANIC(msg) fprintf(stderr, PROGRAM ": ERROR: " msg)
-#define ASSERT(b, msg) do { if(!(b)) { PANIC(msg); } } while(0)
+
+#if DEBUG
+#define FILE_POS "(" STRINGIFY(__FILE__) ":" STRINGIFY(__LINE__) "): "
+#else
+#define FILE_POS
+#endif
+
+#define LOG_ERROR(...) fprintf(stderr, PROGRAM FILE_POS ": ERROR: " __VA_ARGS__)
+
+#define PANIC_FMT(...) { LOG_ERROR(__VA_ARGS__); exit(-1); }
+#define PANIC(msg) { LOG_ERROR(msg); exit(-1); }
+#define ASSERT(b, ...) do { if(!(b)) { PANIC(__VA_ARGS__); } } while(0)
 
 #define STATIC_ARRAY_SIZE(arr) (sizeof(arr) / sizeof(*arr))
 
@@ -32,9 +44,9 @@ enum MakeMode : int
 /* helpers */
 static inline int
 copy_args(
-    char **prog_args,
+    char **restrict prog_args,
     size_t prog_args_max,
-    char **buffer,
+    char **restrict buffer,
     size_t buffer_len)
 {
   if(prog_args_max < buffer_len) { return 0; }
@@ -50,6 +62,84 @@ copy_args(
 }
 
 /* main */
+static inline int
+read_exec_stdout(
+    char **restrict exec,
+    char *restrict out,
+    size_t out_cap,
+    char **restrict envp)
+{
+  int pipefd[2];
+  if(pipe(pipefd) == -1) { LOG_ERROR("pipe failed"); return 0; }
+  int out_pid = fork(); // I know, we all hate fork, deal with it
+  if(out_pid == -1)
+  {
+    LOG_ERROR("fork failed\n");
+    return 0;
+  }
+  else if(out_pid == 0)
+  {
+    dup2(pipefd[1], STDOUT_FILENO);
+    close(pipefd[0]);
+    close(pipefd[1]);
+
+    execve(exec[0], exec, envp);
+    PANIC("failed to exec");
+  }
+  else
+  {
+    close(pipefd[1]);
+
+    ssize_t len = read(pipefd[0], out, out_cap);
+    if(len == -1) { LOG_ERROR("read from pipe failed"); return 0; }
+    waitpid(out_pid, NULL, 0);
+
+    close(pipefd[0]);
+    while(isspace(out[len - 1])) { out[--len] = 0; }
+  }
+  return 1;
+}
+
+static inline int
+get_pkg_configs(
+    char *restrict cflags_out,
+    size_t cflags_out_cap,
+    char *restrict libs_out,
+    size_t libs_out_cap,
+    char **restrict envp)
+{
+  int retval = 0;
+
+  char cflags_flag[] = "--cflags";
+  char libs_flag[] = "--libs";
+  char *pkg_config[] = {
+    "/usr/bin/pkg-config",
+    NULL,
+    "luajit",
+    NULL,
+  };
+
+  // cflags
+  pkg_config[1] = cflags_flag;
+  if(!read_exec_stdout(pkg_config, cflags_out, cflags_out_cap, envp))
+  {
+    LOG_ERROR("pkg-config cflags failed");
+    goto EXIT;
+  }
+
+  // libs
+  pkg_config[1] = libs_flag;
+  if(!read_exec_stdout(pkg_config, libs_out, libs_out_cap, envp))
+  {
+    LOG_ERROR("pkg-config libs failed");
+    goto EXIT;
+  }
+
+  retval = 1;
+EXIT:
+  return retval;
+}
+
 int
 main(
     int argc,
@@ -143,6 +233,16 @@ main(
         warn_flags, warn_flags_len),
       "ran out of args\n");
   prog_args_len += warn_flags_len;
+
+  // pkg-config
+  char cflags[256] = {0}; // -I/path/to/lib
+  char libs[2 + PATH_MAX] = {0}; // arbitrary
+  if(!get_pkg_configs(cflags, sizeof(cflags), libs, sizeof(libs), envp))
+  {
+    PANIC("get pkg-config failed\n");
+  }
+  prog_args[prog_args_len++] = cflags;
+  prog_args[prog_args_len++] = libs;
 
   // extra_args
   ASSERT(copy_args(
