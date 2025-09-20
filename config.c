@@ -1,7 +1,6 @@
 // TODO: replace any `do_cmdline_cmd` if possible
 // TODO: test if the plugins/binds actually work
-// TODO: keep vim always on the stack
-// TODO: place non plugin options at top
+// TODO: refactor locality of option settings
 // TODO: more asserts on lua types
 // TODO: get ref for function keybinds
 
@@ -240,10 +239,14 @@ nvim_mk_augroup_command(
   lua_pop(L, 1); \
 } while(0)
 
-#define LUA_COLON_PCALL(L, f, in, out) do { \
+#define LUA_COLON(L, f) do { \
   lua_pushvalue(L, -1); \
   lua_getfield(L, -1, f); \
   lua_insert(L, -2); \
+} while(0)
+
+#define LUA_COLON_PCALL(L, f, in, out) do { \
+  LUA_COLON(L, f); \
   LUA_PCALL(L, in, out); \
 } while(0)
 
@@ -314,11 +317,11 @@ lua_stack_dump(
     fprintf(fptr, "%d\t%s\t", i, luaL_typename(L, i));
     switch (lua_type(L, i))
     {
-    case LUA_TNUMBER: { fprintf(fptr, "%g\n",lua_tonumber(L, i)); } break;
-    case LUA_TSTRING: { fprintf(fptr, "%s\n",lua_tostring(L, i)); } break;
+    case LUA_TNUMBER: { fprintf(fptr, "%g\n", lua_tonumber(L, i)); } break;
+    case LUA_TSTRING: { fprintf(fptr, "%s\n", lua_tostring(L, i)); } break;
     case LUA_TBOOLEAN: { fprintf(fptr, "%s\n", (lua_toboolean(L, i) ? "true" : "false")); } break;
     case LUA_TNIL: { fprintf(fptr, "%s\n", "nil"); } break;
-    default: { fprintf(fptr, "%p\n",lua_topointer(L, i)); } break;
+    default: { fprintf(fptr, "%p\n", lua_topointer(L, i)); } break;
     }
   }
   fclose(fptr);
@@ -420,13 +423,38 @@ lsp_on_attach(
   lua_getfield(L, -1, "buf");
   Buffer bufnr = lua_tointeger(L, -1);
 
+  // setup lsp omnifunc completion
   lua_getglobal(L, "vim"); ASSERT(L, lua_istable(L, -1));
   lua_getfield(L, -1, "bo"); ASSERT(L, lua_istable(L, -1));
   lua_pushinteger(L, bufnr);
   lua_gettable(L, -2);
   lua_pushstring(L, "v:lua.vim.lsp.omnifunc");
   lua_setfield(L, -2, "omnifunc");
+  lua_pop(L, 2);
 
+  // setup lsp completion
+  lua_getfield(L, -1, "lsp"); ASSERT(L, lua_istable(L, -1));
+  lua_getfield(L, -1, "get_client_by_id");
+  lua_getfield(L, 1, "data"); ASSERT(L, lua_istable(L, -1));
+  lua_getfield(L, -1, "client_id");
+  lua_remove(L, -2);
+  LUA_PCALL(L, 1, 1);
+
+  LUA_COLON(L, "supports_method");
+  lua_pushstring(L,"textDocument/completion");
+  LUA_PCALL(L, 2, 1);
+  if(lua_toboolean(L, -1))
+  {
+    lua_getfield(L, 4, "completion"); ASSERT(L, lua_istable(L, -1));
+    lua_getfield(L, -1, "enable");
+    lua_pushboolean(L, true);
+    lua_getfield(L, 5, "id");
+    lua_pushvalue(L, 2);
+    LUA_PCALL_VOID(L, 3, 0);
+    NVIM_MAP_CMD(L, "i", "<c-space>", "lua vim.lsp.completion.get()");
+  }
+
+  // lsp keybinds
   nvim_map_bufnr(L, bufnr, "n", "gD", "<cmd>lua vim.lsp.buf.declaration()<cr>");
   nvim_map_bufnr(L, bufnr, "n", "gd", "<cmd>lua vim.lsp.buf.definition()<cr>");
   nvim_map_bufnr(L, bufnr, "n", "gi", "<cmd>lua vim.lsp.buf.implementation()<cr>");
@@ -626,11 +654,11 @@ luaopen_config(
   nvim_set_o(L, "wildmode", nvim_mk_obj_string("longest:full"));
   nvim_set_o(L, "wildmenu", nvim_mk_obj_bool(true));
 
-  nvim_set_o(L, "completeopt", nvim_mk_obj_string("longest"));
+  nvim_set_o(L, "completeopt", nvim_mk_obj_string("longest,noselect"));
 
   /* Keymaps */
   // Auto Completion
-  nvim_map(L, "i", "<c-space>", "<c-x><c-u>");
+  nvim_map(L, "i", "<c-space>", "<c-x><c-o>");
 
   // Terminal Binds
   nvim_map(L, "t", "<C-w>", "<c-\\><c-n>");
@@ -900,20 +928,24 @@ luaopen_config(
   // Setup LSP
   {
     lua_getglobal(L, "vim"); ASSERT(L, lua_istable(L, -1));
-    lua_getfield(L, -1, "lsp"); ASSERT(L, lua_istable(L, -1));
-    lua_getfield(L, -1, "enable");
 
     // servers
-#define LUA_NVIM_LSP_ENABLE(ls) do {\
-  lua_pushvalue(L, -1); \
-  lua_pushstring(L, ls); \
-  LUA_PCALL(L, 1, 0); \
-} while(0)
-    LUA_NVIM_LSP_ENABLE("lua_ls");
-    LUA_NVIM_LSP_ENABLE("clangd");
-    LUA_NVIM_LSP_ENABLE("ols");
-#undef LUA_NVIM_LSP_ENABLE
-    lua_pop(L, 2);
+    char *lsp_servers[] = {
+      "lua_ls",
+      "clangd",
+      "ols",
+    };
+    lua_getfield(L, -1, "lsp"); ASSERT(L, lua_istable(L, -1));
+    lua_getfield(L, -1, "enable");
+    lua_createtable(L, 3, 0); {
+      for(int i = 0;
+          i < (int)STATIC_ARRAY_SIZE(lsp_servers);
+          i++)
+      {
+        LUA_PUSH_IDX(L, string, lsp_servers[i], i);
+      }
+    }
+    LUA_PCALL_VOID(L, 1, 0);
 
     // features
     lua_getfield(L, -1, "diagnostic"); ASSERT(L, lua_istable(L, -1));
