@@ -1,14 +1,15 @@
+# C Nvim - Neovim config in C
 This project is purely for fun (it was not fun), it will probably break on other computers / versions of nvim.
 
-I tested this on `nvim-v0.11.3`, `luajit-5.1`.
+I tested this on `nvim-v0.11.4`, `luajit-5.1`.
 
 Build Requires:
 - `gcc` or `any other C compiler that supports this relatively standard C`
-- `luajit` <!-- C development headers -->
-- `pkg-config` <!-- get flags for compiler -->
+- `luajit-devel` (C development headers)
+- `pkg-config` (get flags for compiler)
 
 Requires:
-- `neovim` <!-- duh -->
+- `neovim` (duh)
 
 My compilation steps are (and this could be specific to my machine):
 ```bash
