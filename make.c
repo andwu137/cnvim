@@ -194,11 +194,24 @@ main(
   size_t prog_args_len = 1;
   char *extra_args[ARGS_MAX] = {0};
   size_t extra_args_len = 0;
+
+  enum MakeMode make_mode = MakeMode_Debug;
   while(argc > 0)
   {
     if(argv[0][0] != '-')
     {
-      break; // there are no more flag args (please dont put them after, im begging you)
+      /* get current mode */
+      if(argc == 0 || strcmp(argv[0], "debug") == 0)
+      {
+      }
+      else if(strcmp(argv[0], "release") == 0)
+      {
+        make_mode = MakeMode_Release;
+      }
+      else
+      {
+        PANIC_FMT("unknown make mode: %s\n", argv[0]);
+      }
     }
     else if(strncmp(argv[0], "--makeprg=", sizeof("--makeprg=") - 1) == 0)
     {
@@ -210,20 +223,6 @@ main(
     }
     argv++;
     argc--;
-  }
-
-  /* get current mode */
-  enum MakeMode make_mode = MakeMode_Debug;
-  if(argc == 0 || strcmp(argv[0], "debug") == 0)
-  {
-  }
-  else if(strcmp(argv[0], "release") == 0)
-  {
-    make_mode = MakeMode_Release;
-  }
-  else
-  {
-    PANIC_FMT("unknown make mode: %s\n", argv[0]);
   }
 
   /* setup build */
