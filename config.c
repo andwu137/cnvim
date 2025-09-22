@@ -10,23 +10,29 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "nvim_api.c"
+
+#include "config.h"
+#include "arena.c"
+#include "fileio.c"
+
 #if DEBUG
 #define PERFORMANCE 1
 #endif
 
 #if PERFORMANCE
+static char const *g_perf_time_strings[] = {
+#define PERF_TIME_X(n) #n,
+  PERF_TIME_LIST
+#undef PERF_TIME_X
+};
+
 #if defined(__linux__)
 #include <time.h>
 #else // __linux__
 #error "OS not supported yet"
 #endif // OS
 #endif // PERFORMANCE
-
-#include "nvim_api.c"
-
-#include "config.h"
-#include "arena.c"
-#include "fileio.c"
 
 /* GLOBALS */
 static char const g_package_dir[] = "site/";
@@ -495,15 +501,11 @@ luaopen_config(
     lua_State *L)
 {
 #if PERFORMANCE
-  struct timespec
-    start_time, end_time,
-    start_path_time, end_path_time,
-    start_opt_time, end_opt_time,
-    start_download_time, end_download_time;
-  clock_gettime(CLOCK_MONOTONIC, &start_time);
+  struct timespec perf_times[Perf_Time_Count][2] = {0};
 
+  START_PERF_TIME(perf_times, Perf_Time_Total);
 
-  start_path_time = start_time;
+  perf_times[Perf_Time_Path][0] = perf_times[Perf_Time_Total][0];
 #endif
   // setup command string creator, useful for temporary strings
   struct Arena string_arena;
@@ -570,9 +572,9 @@ luaopen_config(
   LUA_PCALL_VOID(L, 1, 0);
 
 #if PERFORMANCE
-  clock_gettime(CLOCK_MONOTONIC, &end_path_time);
+  END_PERF_TIME(perf_times, Perf_Time_Path);
 
-  start_opt_time = end_path_time;
+  perf_times[Perf_Time_Opt][0] = perf_times[Perf_Time_Path][1];
 #endif
 
   /* OPTIONS */
@@ -702,19 +704,19 @@ luaopen_config(
   // Toggle
   NVIM_MAP_CMD(L, "n", "<leader>th", "ColorizerToggle");
 
-  // Panes
+  // Windows
   NVIM_MAP_CMD(L, "n", "<leader>v", "vsp");
-  NVIM_MAP_CMD(L, "n", "<leader>pv", "vsp");
+  NVIM_MAP_CMD(L, "n", "<leader>wv", "vsp");
   NVIM_MAP_CMD(L, "n", "<leader>x", "sp");
-  NVIM_MAP_CMD(L, "n", "<leader>px", "sp");
-  NVIM_MAP_CMD(L, "n", "<leader>pt", "tab split");
+  NVIM_MAP_CMD(L, "n", "<leader>wx", "sp");
+  NVIM_MAP_CMD(L, "n", "<leader>wt", "tab split");
 
-  NVIM_MAP_CMD(L, "n", "<leader>p|", "vertical resize");
-  NVIM_MAP_CMD(L, "n", "<leader>p_", "horizontal resize");
-  NVIM_MAP_CMD(L, "n", "<leader>pZ", "wincmd =");
-  nvim_map(L, "n", "<leader>pz", "<cmd>horizontal resize<cr><cmd>vertical resize<cr>");
+  NVIM_MAP_CMD(L, "n", "<leader>w|", "vertical resize");
+  NVIM_MAP_CMD(L, "n", "<leader>w_", "horizontal resize");
+  NVIM_MAP_CMD(L, "n", "<leader>ws", "wincmd =");
+  nvim_map(L, "n", "<leader>wf", "<cmd>horizontal resize<cr><cmd>vertical resize<cr>");
 
-  NVIM_MAP_CMD(L, "n", "<leader>pN", "setlocal buftype=nofile"); // turn off ability to save
+  NVIM_MAP_CMD(L, "n", "<leader>wN", "setlocal buftype=nofile"); // turn off ability to save
   /* End Keymaps */
 
   // Highlight when yanking (copying) text
@@ -722,9 +724,9 @@ luaopen_config(
       nvim_mk_string("lua vim.highlight.on_yank({ on_visual = false })"));
 
 #if PERFORMANCE
-  clock_gettime(CLOCK_MONOTONIC, &end_opt_time);
+  END_PERF_TIME(perf_times, Perf_Time_Opt);
 
-  start_download_time = end_opt_time;
+  perf_times[Perf_Time_Download][0] = perf_times[Perf_Time_Opt][1];
 #endif
 
   /* Download Packages */
@@ -977,6 +979,7 @@ luaopen_config(
     lua_pop(L, 1);
   }
 
+#if MODE_FORMATTER
   // Auto Format
   LUA_MINIDEPS_ADD(L);
   lua_createtable(L, 0, 1); {
@@ -1031,6 +1034,7 @@ luaopen_config(
   LUA_PCALL_VOID(L, 1, 0);
 
   NVIM_MAP_CMD(L, "n", "<leader>cf", "lua require('conform').format({ async = true, lsp_format = 'fallback' })");
+#endif // MODE_FORMATTER
 
   // Text Semantics Engine
   LUA_MINIDEPS_ADD(L);
@@ -1079,6 +1083,7 @@ luaopen_config(
   }
   LUA_PCALL_VOID(L, 1, 0);
 
+#if MODE_DESIGN
   // Highlight Color Codes
   LUA_MINIDEPS_ADD(L);
   lua_createtable(L, 0, 1); {
@@ -1102,8 +1107,10 @@ luaopen_config(
 
   LUA_REQUIRE_SETUP(L, "colortils");
   LUA_PCALL_VOID(L, 0, 0);
+#endif // MODE_DESIGN
 
   // Theme
+#if MODE_THEME
   LUA_MINIDEPS_ADD(L);
   lua_createtable(L, 0, 2); {
     LUA_PUSH_KV(L, "source", string, "https://github.com/zenbones-theme/zenbones.nvim");
@@ -1111,6 +1118,20 @@ luaopen_config(
     LUA_PUSH_KV_IDX(L, "depends", string, "rktjmp/lush.nvim");
   }
   LUA_PCALL_VOID(L, 1, 0);
+
+  // TODO: nvim_set_g("tokyobones", = {
+  //   lightness = 'bright',
+  //   transparent_background = true,
+  //   darken_comments = 45,
+  // });
+
+  lua_getglobal(L, "vim"); ASSERT(L, lua_istable(L, -1));
+  lua_getfield(L, -1, "cmd"); ASSERT(L, lua_istable(L, -1));
+  lua_getfield(L, -1, "colorscheme");
+  lua_pushstring(L, "tokyobones");
+  LUA_PCALL_VOID(L, 1, 0);
+  lua_pop(L, 1);
+#endif // MODE_THEME
 
   // highlights
   {
@@ -1124,25 +1145,7 @@ luaopen_config(
     nvim_highlight(L, "Whitespace", hl);
   }
 
-  // TODO: nvim_set_g("tokyobones", = {
-  //   lightness = 'bright',
-  //   transparent_background = true,
-  //   darken_comments = 45,
-  // });
-
-  // Themeing
-  nvim_set_o(L, "background", nvim_mk_obj_string("light"));
-
-  /* colorscheme
-  lua_getglobal(L, "vim"); ASSERT(L, lua_istable(L, -1));
-  lua_getfield(L, -1, "cmd"); ASSERT(L, lua_istable(L, -1));
-  lua_getfield(L, -1, "colorscheme");
-  lua_pushstring(L, "tokyobones");
-  LUA_PCALL_VOID(L, 1, 0);
-  lua_pop(L, 1);
-  */
-
-  /* // syntax highlighting
+  /* // disable syntax highlighting
   lua_getglobal(L, "vim"); ASSERT(L, lua_istable(L, -1));
   lua_getfield(L, -1, "cmd"); ASSERT(L, lua_istable(L, -1));
   lua_getfield(L, -1, "syntax");
@@ -1151,28 +1154,23 @@ luaopen_config(
   lua_pop(L, 1);
   */
 
-#if PERFORMANCE
-  clock_gettime(CLOCK_MONOTONIC, &end_download_time);
+  // Themeing
+  nvim_set_o(L, "background", nvim_mk_obj_string("light"));
 
-  clock_gettime(CLOCK_MONOTONIC, &end_time);
+#if PERFORMANCE
+  END_PERF_TIME(perf_times, Perf_Time_Download);
+
+  END_PERF_TIME(perf_times, Perf_Time_Total);
+  for(enum Perf_Time i = 0;
+      i < (int)STATIC_ARRAY_SIZE(g_perf_time_strings);
+      i++)
   {
     char out_buf[4096] = {0};
     snprintf(out_buf, sizeof(out_buf),
-        "time took: %ld.%09ld\n"
-        "\tpath time took    : %ld.%09ld\n"
-        "\topt time took     : %ld.%09ld\n"
-        "\tdownload time took: %ld.%09ld\n",
-        end_time.tv_sec - start_time.tv_sec,
-        end_time.tv_nsec - start_time.tv_nsec,
-
-        end_path_time.tv_sec - start_path_time.tv_sec,
-        end_path_time.tv_nsec - start_path_time.tv_nsec,
-
-        end_opt_time.tv_sec - start_opt_time.tv_sec,
-        end_opt_time.tv_nsec - start_opt_time.tv_nsec,
-
-        end_download_time.tv_sec - start_download_time.tv_sec,
-        end_download_time.tv_nsec - start_download_time.tv_nsec);
+        "time took: %ld.%09ld; %s\n",
+        perf_times[i][1].tv_sec - perf_times[i][0].tv_sec,
+        perf_times[i][1].tv_nsec - perf_times[i][0].tv_nsec,
+        g_perf_time_strings[i]);
     lua_getglobal(L, "vim");
     lua_getfield(L, -1, "print");
     lua_pushstring(L, out_buf);
