@@ -1,7 +1,7 @@
 # C Nvim - Neovim config in C
 This project is purely for fun (it was not fun), it will probably break on other computers / versions of nvim.
 
-I tested this on `nvim-v0.11.4`, `luajit-5.1`.
+I tested this on `nvim-v0.11.4`, `luajit-5.1`, `gcc-15.2.1`, `linux-x86_64`, `glibc-2.41`.
 
 Build Requires:
 - `gcc` or `any other C compiler that supports this relatively standard C`
@@ -15,7 +15,7 @@ My compilation steps are (and this could be specific to my machine):
 ```bash
 git clone https://github.com/andwu137/cnvim.git
 gcc -Wall -Wextra -Wpedantic -O3 -march=native make.c -o make_c
-./make_c release
+./make.sh release -DMODE_FORMATTER -DMODE_DESIGN -DMODE_THEME # -DPERFORMANCE -DDEBUG
 # or on my computer, use ./make.sh
 ```
 
