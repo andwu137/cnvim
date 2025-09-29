@@ -16,10 +16,6 @@
 #include "arena.c"
 #include "fileio.c"
 
-#if DEBUG
-#define PERFORMANCE 1
-#endif
-
 #if PERFORMANCE
 static char const *g_perf_time_strings[] =
 {
@@ -398,22 +394,16 @@ mlua_minideps_add(
       g_lua_macro_latch = 0, \
         lua_settable(L, -3))
 
-#define MLUA_PUSH_KV_TABLE_KV(L, k1, k2, t, ...) do { \
-  lua_pushstring(L, k1); \
-  lua_createtable(L, 0, 1); \
-  lua_pushstring(L, k2); \
-  lua_push##t(L, __VA_ARGS__); \
-  lua_settable(L, -3); \
-  lua_settable(L, -3); \
-} while(0)
-
-#define MLUA_PUSH_KV_TABLE_IDX(L, k, t, ...) do { \
-  lua_pushstring(L, k); \
-  lua_createtable(L, 0, 1); \
-  lua_push##t(L, __VA_ARGS__); \
-  lua_rawseti(L, -2, 1); \
-  lua_settable(L, -3); \
-} while(0)
+#define MLUA_PUSH_KV_TABLE_KV(L, k1, k2) \
+  for( \
+      g_lua_macro_latch = 1, \
+        lua_pushstring(L, k1), \
+        lua_createtable(L, 0, 1), \
+        lua_pushstring(L, k2); \
+      g_lua_macro_latch; \
+      g_lua_macro_latch = 0, \
+        lua_settable(L, -3), \
+        lua_settable(L, -3))
 
 #define MLUA_PUSH_IDX(L, i) \
   for( \
@@ -421,6 +411,16 @@ mlua_minideps_add(
       g_lua_macro_latch; \
       g_lua_macro_latch = 0, \
         lua_rawseti(L, -2, i))
+
+#define MLUA_PUSH_KV_TABLE_IDX(L, k) \
+  for( \
+      g_lua_macro_latch = 1, \
+        lua_pushstring(L, k), \
+        lua_createtable(L, 1, 0); \
+      g_lua_macro_latch; \
+      g_lua_macro_latch = 0, \
+        lua_rawseti(L, -2, 1), \
+        lua_settable(L, -3))
 
 /* MAIN */
 int
@@ -649,7 +649,7 @@ luaopen_config(
   do_cmdline_cmd("packadd mini.nvim | helptags ALL");
   MLUA_REQUIRE_SETUP_TABLE(L, "mini.deps", 0, 1)
   {
-    MLUA_PUSH_KV_TABLE_KV(L, "path", "package", lstring, plugin_path, plugin_path_len);
+    MLUA_PUSH_KV_TABLE_KV(L, "path", "package") { lua_pushlstring(L, plugin_path, plugin_path_len); }
   }
 
 #if PERFORMANCE
@@ -820,11 +820,11 @@ luaopen_config(
   mlua_require_setup(L, "mini.bracketed");
   mlua_pcall_void(L, 0);
 
-  MLUA_REQUIRE_SETUP_TABLE(L, "mini.comment", 0, 1)
+  MLUA_REQUIRE_SETUP_TABLE(L, "mini.comment", 0, 2)
   {
     MLUA_PUSH_KV(L, "ignore_blank_line") { lua_pushboolean(L, true); }
 
-    MLUA_PUSH_KV_TABLE_KV(L, "options", "custom_commentstring", cfunction, mini_comment_custom_commentstring);
+    MLUA_PUSH_KV_TABLE_KV(L, "options", "custom_commentstring") { lua_pushcfunction(L, mini_comment_custom_commentstring); }
   }
 
   // Detect Tabbing
@@ -843,11 +843,11 @@ luaopen_config(
   {
     MLUA_PUSH_KV_TABLE(L, "signs", 0, 5)
     {
-      MLUA_PUSH_KV_TABLE_KV(L, "add", "text", string, "+");
-      MLUA_PUSH_KV_TABLE_KV(L, "change", "text", string, "~");
-      MLUA_PUSH_KV_TABLE_KV(L, "delete", "text", string, "_");
-      MLUA_PUSH_KV_TABLE_KV(L, "topdelete", "text", string, "‾");
-      MLUA_PUSH_KV_TABLE_KV(L, "changedelete", "text", string, "~");
+      MLUA_PUSH_KV_TABLE_KV(L, "add", "text") { lua_pushstring(L, "+"); }
+      MLUA_PUSH_KV_TABLE_KV(L, "change", "text") { lua_pushstring(L, "~"); }
+      MLUA_PUSH_KV_TABLE_KV(L, "delete", "text") { lua_pushstring(L, "_"); }
+      MLUA_PUSH_KV_TABLE_KV(L, "topdelete", "text") { lua_pushstring(L, "‾"); }
+      MLUA_PUSH_KV_TABLE_KV(L, "changedelete", "text") { lua_pushstring(L, "~"); }
     }
   }
 
@@ -877,7 +877,7 @@ luaopen_config(
     MLUA_PUSH_KV(L, "natural_order") { lua_pushboolean(L, true); }
     MLUA_PUSH_KV(L, "delete_to_trash") { lua_pushboolean(L, true); }
 
-    MLUA_PUSH_KV_TABLE_KV(L, "view_options", "show_hidden", boolean, true);
+    MLUA_PUSH_KV_TABLE_KV(L, "view_options", "show_hidden") { lua_pushboolean(L, true); }
 
     MLUA_PUSH_KV_TABLE(L, "keymaps", 0, 8)
     {
@@ -898,7 +898,7 @@ luaopen_config(
   MLUA_MINIDEPS_ADD(L, 0, 2)
   {
     MLUA_PUSH_KV(L, "source") { lua_pushstring(L, "https://github.com/jiaoshijie/undotree"); }
-    MLUA_PUSH_KV_TABLE_IDX(L, "depends", string, "nvim-lua/plenary.nvim");
+    MLUA_PUSH_KV_TABLE_IDX(L, "depends") { lua_pushstring(L, "nvim-lua/plenary.nvim"); }
   }
 
   mlua_require_setup(L, "undotree");
@@ -906,12 +906,12 @@ luaopen_config(
   NVIM_MAP_CMD(L, "n", "<leader>cu", "lua require('undotree').toggle()");
 
   // Show Keybinds
-  MLUA_MINIDEPS_ADD(L, 0, 2)
+  MLUA_MINIDEPS_ADD(L, 0, 1)
   {
     MLUA_PUSH_KV(L, "source") { lua_pushstring(L, "https://github.com/folke/which-key.nvim"); }
   }
 
-  MLUA_REQUIRE_SETUP_TABLE(L, "which-key", 0, 2)
+  MLUA_REQUIRE_SETUP_TABLE(L, "which-key", 0, 1)
   {
     MLUA_PUSH_KV(L, "delay") { lua_pushinteger(L, 300); }
   }
@@ -919,7 +919,7 @@ luaopen_config(
   // Search Engine
   MLUA_REQUIRE_SETUP_TABLE(L, "mini.pick", 0, 1)
   {
-    MLUA_PUSH_KV_TABLE_KV(L, "window", "config", cfunction, mini_pick_window_config);
+    MLUA_PUSH_KV_TABLE_KV(L, "window", "config") { lua_pushcfunction(L, mini_pick_window_config); }
   }
 
   NVIM_MAP_CMD(L, "n", "<leader>sf", "Pick files");
@@ -937,7 +937,7 @@ luaopen_config(
     MLUA_PUSH_KV(L, "source") { lua_pushstring(L, "https://github.com/chentoast/marks.nvim"); }
   }
 
-  MLUA_REQUIRE_SETUP_TABLE(L, "marks", 0, 1)
+  MLUA_REQUIRE_SETUP_TABLE(L, "marks", 0, 2)
   {
     MLUA_PUSH_KV(L, "default_mappings") { lua_pushboolean(L, true); }
 
@@ -950,7 +950,7 @@ luaopen_config(
     MLUA_PUSH_KV(L, "source") { lua_pushstring(L, "https://github.com/ThePrimeagen/harpoon"); }
     MLUA_PUSH_KV(L, "checkout") { lua_pushstring(L, "harpoon2"); }
 
-    MLUA_PUSH_KV_TABLE_IDX(L, "depends", string, "nvim-lua/plenary.nvim");
+    MLUA_PUSH_KV_TABLE_IDX(L, "depends") { lua_pushstring(L, "nvim-lua/plenary.nvim"); }
   }
 
   mlua_require(L, "harpoon"); mlua_self_pcall_void(L, "setup", 1);
@@ -1035,10 +1035,10 @@ luaopen_config(
   {
     MLUA_PUSH_KV_TABLE(L, "formatters_by_ft", 0, 14)
     {
-      MLUA_PUSH_KV_TABLE_IDX(L, "c", string, "clang-format");
-      MLUA_PUSH_KV_TABLE_IDX(L, "cpp", string, "clang-format");
-      MLUA_PUSH_KV_TABLE_IDX(L, "odin", string, "odinfmt");
-      MLUA_PUSH_KV_TABLE_IDX(L, "rust", string, "rustfmt");
+      MLUA_PUSH_KV_TABLE_IDX(L, "c") { lua_pushstring(L, "clang-format"); }
+      MLUA_PUSH_KV_TABLE_IDX(L, "cpp") { lua_pushstring(L, "clang-format"); }
+      MLUA_PUSH_KV_TABLE_IDX(L, "odin") { lua_pushstring(L, "odinfmt"); }
+      MLUA_PUSH_KV_TABLE_IDX(L, "rust") { lua_pushstring(L, "rustfmt"); }
 
       MLUA_PUSH_KV_TABLE(L, "haskell", 2, 1)
       {
@@ -1047,25 +1047,25 @@ luaopen_config(
         MLUA_PUSH_KV(L, "stop_after_first") { lua_pushboolean(L, true); }
       }
 
-      MLUA_PUSH_KV_TABLE_IDX(L, "clojure", string, "cljfmt");
-      MLUA_PUSH_KV_TABLE_IDX(L, "java", string, "google-java-format");
-      MLUA_PUSH_KV_TABLE_IDX(L, "cs", string, "csharpier");
-      MLUA_PUSH_KV_TABLE_IDX(L, "lua", string, "stylua");
-      MLUA_PUSH_KV_TABLE_IDX(L, "purescript", string, "purescript-tidy");
-      MLUA_PUSH_KV_TABLE_IDX(L, "html", string, "prettier");
-      MLUA_PUSH_KV_TABLE_IDX(L, "typescript", string, "biome");
-      MLUA_PUSH_KV_TABLE_IDX(L, "javascript", string, "biome");
+      MLUA_PUSH_KV_TABLE_IDX(L, "clojure") { lua_pushstring(L, "cljfmt"); }
+      MLUA_PUSH_KV_TABLE_IDX(L, "java") { lua_pushstring(L, "google-java-format"); }
+      MLUA_PUSH_KV_TABLE_IDX(L, "cs") { lua_pushstring(L, "csharpier"); }
+      MLUA_PUSH_KV_TABLE_IDX(L, "lua") { lua_pushstring(L, "stylua"); }
+      MLUA_PUSH_KV_TABLE_IDX(L, "purescript") { lua_pushstring(L, "purescript-tidy"); }
+      MLUA_PUSH_KV_TABLE_IDX(L, "html") { lua_pushstring(L, "prettier"); }
+      MLUA_PUSH_KV_TABLE_IDX(L, "typescript") { lua_pushstring(L, "biome"); }
+      MLUA_PUSH_KV_TABLE_IDX(L, "javascript") { lua_pushstring(L, "biome"); }
       MLUA_PUSH_KV(L, "python") { lua_pushcfunction(L, conform_formatters_by_ft_python); }
     }
 
-    MLUA_PUSH_KV_TABLE(L, "formatters", 0, 1)
+    MLUA_PUSH_KV_TABLE_KV(L, "formatters", "odinfmt")
     {
-      MLUA_PUSH_KV_TABLE(L, "odinfmt", 0, 1)
+      lua_createtable(L, 0, 3);
       {
         MLUA_PUSH_KV(L, "command") { lua_pushstring(L, "odinfmt"); }
         MLUA_PUSH_KV(L, "stdin") { lua_pushboolean(L, true); }
 
-        MLUA_PUSH_KV_TABLE_IDX(L, "args", string, "odinfmt");
+        MLUA_PUSH_KV_TABLE_IDX(L, "args") { lua_pushstring(L, "odinfmt"); }
       }
     }
   }
@@ -1087,8 +1087,8 @@ luaopen_config(
   MLUA_REQUIRE_SETUP_TABLE(L, "nvim-treesitter", 0, 1)
   {
     MLUA_PUSH_KV(L, "auto_install") { lua_pushboolean(L, true); }
-    MLUA_PUSH_KV_TABLE(L, "highlight", 0, 1) { MLUA_PUSH_KV(L, "enable") { lua_pushboolean(L, false); } }
-    MLUA_PUSH_KV_TABLE(L, "indent", 0, 1) { MLUA_PUSH_KV(L, "enable") { lua_pushboolean(L, false); } }
+    MLUA_PUSH_KV_TABLE_KV(L, "highlight", "enable") { lua_pushboolean(L, false); }
+    MLUA_PUSH_KV_TABLE_KV(L, "indent", "enable") { lua_pushboolean(L, false); }
   }
 
   // Highlight Special Comments
@@ -1096,14 +1096,14 @@ luaopen_config(
   {
     MLUA_PUSH_KV(L, "source") { lua_pushstring(L, "https://github.com/folke/todo-comments.nvim"); }
 
-    MLUA_PUSH_KV_TABLE(L, "depends", 0, 1) { MLUA_PUSH_IDX(L, 1) { lua_pushstring(L, "nvim-lua/plenary.nvim"); } }
+    MLUA_PUSH_KV_TABLE_IDX(L, "depends") { lua_pushstring(L, "nvim-lua/plenary.nvim"); }
   }
 
   MLUA_REQUIRE_SETUP_TABLE(L, "todo-comments", 0, 3)
   {
     MLUA_PUSH_KV(L, "signs") { lua_pushboolean(L, false); }
 
-    MLUA_PUSH_KV_TABLE(L, "search", 0, 1) { MLUA_PUSH_KV(L, "pattern") { lua_pushstring(L, "\\b(KEYWORDS)(\\([^\\)]*\\))?:"); } }
+    MLUA_PUSH_KV_TABLE_KV(L, "search", "pattern") { lua_pushstring(L, "\\b(KEYWORDS)(\\([^\\)]*\\))?:"); }
 
     MLUA_PUSH_KV_TABLE(L, "highlight", 0, 4)
     {
@@ -1123,7 +1123,7 @@ luaopen_config(
 
   MLUA_REQUIRE_SETUP_TABLE(L, "colorizer", 0, 1)
   {
-    MLUA_PUSH_KV_TABLE_KV(L, "user_default_options", "names", boolean, false);
+    MLUA_PUSH_KV_TABLE_KV(L, "user_default_options", "names") { lua_pushboolean(L, false); }
   }
   NVIM_MAP_CMD(L, "n", "<leader>uh", "Colortils");
 
@@ -1143,7 +1143,7 @@ luaopen_config(
   {
     MLUA_PUSH_KV(L, "source") { lua_pushstring(L, "https://github.com/zenbones-theme/zenbones.nvim"); }
 
-    MLUA_PUSH_KV_TABLE_IDX(L, "depends", string, "rktjmp/lush.nvim");
+    MLUA_PUSH_KV_TABLE_IDX(L, "depends") { lua_pushstring(L, "rktjmp/lush.nvim"); }
   }
 
   // TODO: nvim_set_g("tokyobones", = {
