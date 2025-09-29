@@ -205,7 +205,7 @@ nvim_highlight(
 
 // Auto Cmds
 static inline Integer
-nvim_mk_augroup_callback(
+nvim_mk_autocmd_callback(
     lua_State *L,
     char *name,
     char *desc,
@@ -230,8 +230,17 @@ nvim_mk_augroup_callback(
   return n;
 }
 
+#define NVIM_MK_AUTOCMD_CALLBACK(L, name, desc, augroup_name, augroup_clear, callback) do { \
+  lsp_disable_semantic_highlights(L); \
+  lua_register(L, "g_" STRINGIFY(callback), callback); \
+  lua_getglobal(L, "g_" STRINGIFY(callback)); \
+  int lua_ref_##callback = luaL_ref(L, LUA_REGISTRYINDEX); \
+  nvim_mk_autocmd_callback(L, name, desc, augroup_name, augroup_clear, \
+      nvim_mk_obj_luaref(lua_ref_##callback)); \
+} while(0)
+
 static inline Integer
-nvim_mk_augroup_command(
+nvim_mk_autocmd_command(
     lua_State *L,
     char *name,
     char *desc,
@@ -584,6 +593,14 @@ lsp_disable_semantic_highlights(
 }
 
 int
+disable_conceallevel(
+    lua_State *L)
+{
+  nvim_set_o(L, "conceallevel", nvim_mk_obj_int(0));
+  return 0;
+}
+
+int
 luaopen_config(
     lua_State *L)
 {
@@ -733,6 +750,13 @@ luaopen_config(
     clear_arena(&string_arena);
   }
 
+  // conceal options (syntax visibility)
+  NVIM_MK_AUTOCMD_CALLBACK(
+      L, "BufEnter", // NOTE: maybe you would put this on another event
+                     // ... but, the once flag is not exposed in my api lol
+      "Disable Conceal on All Buffers", "my-conceallevel", true,
+      disable_conceallevel);
+
   // completion
   nvim_set_o(L, "wildmode", nvim_mk_obj_string("longest:full"));
   nvim_set_o(L, "wildmenu", nvim_mk_obj_bool(true));
@@ -801,7 +825,7 @@ luaopen_config(
   /* End Keymaps */
 
   // Highlight when yanking (copying) text
-  nvim_mk_augroup_command(L, "TextYankPost", "Highlight when yanking text", "my-highlight-yank", true,
+  nvim_mk_autocmd_command(L, "TextYankPost", "Highlight when yanking text", "my-highlight-yank", true,
       nvim_mk_string("lua vim.highlight.on_yank({ on_visual = false })"));
 
 #if PERFORMANCE
@@ -1007,19 +1031,16 @@ luaopen_config(
     mlua_pcall_void(L, 1);
 
     // disable semantic highlights
-    lsp_disable_semantic_highlights(L);
-    lua_register(L, "g_lsp_disable_semantic_highlights", lsp_disable_semantic_highlights);
-    lua_getglobal(L, "g_lsp_disable_semantic_highlights");
-    int lua_ref_lsp_disable_semantic_highlights = luaL_ref(L, LUA_REGISTRYINDEX);
-    nvim_mk_augroup_callback(L, "ColorScheme", "Disable LSP Highlights", "my-colorscheme-disable-lsp", false,
-        nvim_mk_obj_luaref(lua_ref_lsp_disable_semantic_highlights));
+    NVIM_MK_AUTOCMD_CALLBACK(
+        L, "ColorScheme",
+        "Disable LSP Highlights", "my-colorscheme-disable-lsp", false,
+        lsp_disable_semantic_highlights);
 
     // on_attach
-    lua_register(L, "g_lsp_on_attach", lsp_on_attach);
-    lua_getglobal(L, "g_lsp_on_attach");
-    int lua_ref_lsp_on_attach = luaL_ref(L, LUA_REGISTRYINDEX);
-    nvim_mk_augroup_callback(L, "LspAttach", "Setup LSP on the Buffer", "my-lsp-attach", true,
-        nvim_mk_obj_luaref(lua_ref_lsp_on_attach));
+    NVIM_MK_AUTOCMD_CALLBACK(
+        L, "LspAttach",
+        "Setup LSP on the Buffer", "my-lsp-attach", true,
+        lsp_on_attach);
 
     lua_pop(L, 1);
   }
