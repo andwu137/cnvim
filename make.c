@@ -22,6 +22,7 @@
 #define PANIC_FMT(...) { LOG_ERROR(__VA_ARGS__); exit(-1); }
 #define PANIC(msg) { LOG_ERROR(msg); exit(-1); }
 #define ASSERT(b, ...) do { if(!(b)) { PANIC(__VA_ARGS__); } } while(0)
+#define ASSERT_FMT(b, ...) do { if(!(b)) { PANIC_FMT(__VA_ARGS__); } } while(0)
 
 #define STATIC_ARRAY_SIZE(arr) (sizeof(arr) / sizeof(*arr))
 
@@ -41,22 +42,56 @@ enum MakeMode : int
   MakeMode__Count,
 };
 
-/* helpers */
-static inline int
-copy_args(
-    char **restrict prog_args,
-    size_t prog_args_max,
-    char **restrict buffer,
-    size_t buffer_len)
+struct CommandBuilder
 {
-  if(prog_args_max < buffer_len) { return 0; }
+  size_t capacity;
+  size_t length;
+  char **buffer;
+};
+
+/* helpers */
+static inline struct CommandBuilder
+make_command_builder(
+    size_t capacity)
+{
+  struct CommandBuilder cb = {
+    .capacity = capacity,
+    .length = 0,
+    .buffer = NULL,
+  };
+  cb.buffer = calloc(capacity, sizeof(*cb.buffer));
+  ASSERT_FMT(cb.buffer != NULL, "failed to allocate: %ldb", capacity * sizeof(*cb.buffer));
+  return cb;
+}
+
+static inline int
+push_command_builder(
+    struct CommandBuilder *restrict command,
+    char *restrict arg)
+{
+  if(command->capacity < command->length + 1) { return 0; }
+
+  command->buffer[command->length] = arg;
+  command->length++;
+
+  return 1;
+}
+
+static inline int
+push_array_command_builder(
+    struct CommandBuilder *restrict command,
+    char **restrict args,
+    size_t args_len)
+{
+  if(command->capacity < command->length + args_len) { return 0; }
 
   for(size_t i = 0;
-      i < buffer_len;
+      i < args_len;
       i++)
   {
-    prog_args[i] = buffer[i];
+    command->buffer[command->length + i] = args[i];
   }
+  command->length += args_len;
 
   return 1;
 }
@@ -190,8 +225,9 @@ main(
   argv++;
 
   /* get args */
-  char *prog_args[ARGS_MAX] = {"/usr/bin/gcc"}; // WARN: max number of args to gcc, i dont think kernel can support more than that lol
-  size_t prog_args_len = 1;
+  // WARN: max number of args to gcc, i dont think linux kernel can support more than that lol
+  struct CommandBuilder command = make_command_builder(ARGS_MAX);
+  push_command_builder(&command, "/usr/bin/gcc");
   char *extra_args[ARGS_MAX] = {0};
   size_t extra_args_len = 0;
 
@@ -215,7 +251,7 @@ main(
     }
     else if(strncmp(argv[0], "--makeprg=", sizeof("--makeprg=") - 1) == 0)
     {
-      prog_args[0] = argv[0] + sizeof("--makeprg=") - 1;
+      command.buffer[0] = argv[0] + sizeof("--makeprg=") - 1;
     }
     else
     {
@@ -227,11 +263,7 @@ main(
 
   /* setup build */
   // warn
-  ASSERT(copy_args(
-        prog_args + prog_args_len, ARGS_MAX - prog_args_len,
-        warn_flags, warn_flags_len),
-      "ran out of args\n");
-  prog_args_len += warn_flags_len;
+  ASSERT(push_array_command_builder(&command, warn_flags, warn_flags_len), "ran out of args\n");
 
   // pkg-config
   char cflags[256] = {0}; // -I/path/to/lib
@@ -240,15 +272,11 @@ main(
   {
     PANIC("get pkg-config failed\n");
   }
-  prog_args[prog_args_len++] = cflags;
-  prog_args[prog_args_len++] = libs;
+  ASSERT(push_command_builder(&command, cflags), "ran out of args\n");
+  ASSERT(push_command_builder(&command, libs), "ran out of args\n");
 
   // extra_args
-  ASSERT(copy_args(
-        prog_args + prog_args_len, ARGS_MAX - prog_args_len,
-        extra_args, extra_args_len),
-      "ran out of args\n");
-  prog_args_len += extra_args_len;
+  ASSERT(push_array_command_builder(&command, extra_args, extra_args_len), "ran out of args\n");
 
   switch(make_mode)
   {
@@ -257,56 +285,36 @@ main(
   } break;
 
   case MakeMode_Debug: {
-    ASSERT(copy_args(
-          prog_args + prog_args_len, ARGS_MAX - prog_args_len,
-          debug_flags, debug_flags_len),
-        "ran out of args\n");
-    prog_args_len += debug_flags_len;
+    ASSERT(push_array_command_builder(&command, debug_flags, debug_flags_len), "ran out of args\n");
   } break;
 
   case MakeMode_Release: {
-    ASSERT(copy_args(
-          prog_args + prog_args_len, ARGS_MAX - prog_args_len,
-          release_flags, release_flags_len),
-        "ran out of args\n");
-    prog_args_len += release_flags_len;
+    ASSERT(push_array_command_builder(&command, release_flags, release_flags_len), "ran out of args\n");
   } break;
   }
 
   // source
-  ASSERT(copy_args(
-        prog_args + prog_args_len, ARGS_MAX - prog_args_len,
-        source_names, source_names_len),
-      "ran out of args\n");
-  prog_args_len += source_names_len;
+  ASSERT(push_array_command_builder(&command, source_names, source_names_len), "ran out of args\n");
 
   // shared lib
-  ASSERT(copy_args(
-        prog_args + prog_args_len, ARGS_MAX - prog_args_len,
-        shared_lib_flags, shared_lib_flags_len),
-      "ran out of args\n");
-  prog_args_len += shared_lib_flags_len;
+  ASSERT(push_array_command_builder(&command, shared_lib_flags, shared_lib_flags_len), "ran out of args\n");
 
-  ASSERT(prog_args_len + 1 < ARGS_MAX, "ran out of args\n");
-  prog_args[prog_args_len++] = "-o";
+  ASSERT(push_command_builder(&command, "-o"), "ran out of args\n");
+  ASSERT(push_command_builder(&command, output_name), "ran out of args\n");
 
-  ASSERT(prog_args_len + 1 < ARGS_MAX, "ran out of args\n");
-  prog_args[prog_args_len++] = output_name;
-
-  ASSERT(prog_args_len + 1 < ARGS_MAX, "ran out of args\n");
-  prog_args[prog_args_len++] = NULL;
+  ASSERT(push_command_builder(&command, NULL), "ran out of args\n");
 
   /* call the build */
   for(size_t i = 0;
-      i < prog_args_len - 1; // ignore the null
+      i < command.length - 1; // ignore the null
       i++)
   {
-    printf("%s ", prog_args[i]);
+    printf("%s ", command.buffer[i]);
   }
   putchar('\n');
-  execve(prog_args[0], prog_args, envp);
+  execve(command.buffer[0], command.buffer, envp);
 
   /* exec failed */
-  PANIC_FMT("execve failed: error_code(%d): program('%s')\n", errno, prog_args[0]);
+  PANIC_FMT("execve failed: error_code(%d): program('%s')\n", errno, command.buffer[0]);
   return -1;
 }

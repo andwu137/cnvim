@@ -15,7 +15,7 @@ My compilation steps are (and this could be specific to my machine):
 ```bash
 git clone https://github.com/andwu137/cnvim.git
 gcc -Wall -Wextra -Wpedantic -O3 -march=native make.c -o make_c
-./make.sh release -DMODE_FORMATTER -DMODE_DESIGN -DMODE_THEME # -DPERFORMANCE -DDEBUG
+./make_c release -DMODE_FORMATTER -DMODE_DESIGN -DMODE_THEME # -DPERFORMANCE -DDEBUG
 # or on my computer, use ./make.sh
 ```
 
