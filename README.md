@@ -18,7 +18,7 @@ git clone https://github.com/andwu137/cnvim.git
 
 # remove -march=native from the source code, if you plan on distributing this to another computer
 gcc -Wall -Wextra -Wpedantic -O3 -march=native make.c -o make_c
-./make_c release -DMODE_FORMATTER -DMODE_DESIGN -DMODE_THEME # -DPERFORMANCE -DDEBUG
+./make_c release -DMODE_FORMATTER -DMODE_DESIGN -DMODE_THEME # -DMODE_FOCUS -DPERFORMANCE -DDEBUG
 
 # or on my computer, use ./make.sh
 ```

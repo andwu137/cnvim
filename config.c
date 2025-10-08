@@ -16,7 +16,22 @@
 #include "arena.c"
 #include "fileio.c"
 
+/* TYPES */
 #if PERFORMANCE
+#define PERF_TIME_LIST \
+  PERF_TIME_X(Total) \
+  PERF_TIME_X(Path) \
+  PERF_TIME_X(Opt) \
+  PERF_TIME_X(Download)
+
+enum Perf_Time : int
+{
+#define PERF_TIME_X(n) Perf_Time_##n,
+  PERF_TIME_LIST
+#undef PERF_TIME_X
+  Perf_Time_Count,
+};
+
 static char const *g_perf_time_strings[] =
 {
 #define PERF_TIME_X(n) #n,
@@ -25,9 +40,9 @@ static char const *g_perf_time_strings[] =
 };
 
 #if defined(__linux__)
-#include <time.h>
+  #include <time.h>
 #else // __linux__
-#error "OS not supported yet"
+  #error "OS not supported yet"
 #endif // OS
 #endif // PERFORMANCE
 
@@ -37,20 +52,6 @@ static char const g_mini_plugin_dir[] = "pack/deps/opt/mini.nvim";
 static char const g_install_mini_nvim_command[] =
   "git clone --filter=blob:none https://github.com/nvim-mini/mini.nvim ";
 static uint8_t g_lua_macro_latch;
-
-// Main Globals
-static char const *g_mini_comment_custom_commentstring_strings[][2] =
-{
-  {"v", "/* %s */"},
-};
-
-static char const *g_nvim_oil_columns[] =
-{
-  // "permissions",
-  // "size",
-  "mtime",
-  "icon",
-};
 
 static char const *g_lsp_servers[] =
 {
@@ -436,6 +437,11 @@ mlua_minideps_add(
         lua_settable(L, -3))
 
 /* MAIN */
+static char const *g_mini_comment_custom_commentstring_strings[][2] =
+{
+  {"v", "/* %s */"},
+};
+
 int
 mini_comment_custom_commentstring(
     lua_State *L)
@@ -615,6 +621,15 @@ lsp_disable_semantic_highlights(
   }
 
   lua_pop(L, 3);
+  return 0;
+}
+
+int
+treesitter_update(
+    lua_State *L)
+{
+  (void)L;
+  do_cmdline_cmd("TSUpdate");
   return 0;
 }
 
@@ -914,14 +929,22 @@ luaopen_config(
 
   MLUA_REQUIRE_SETUP_TABLE(L, "oil", 0, 5)
   {
-    int nvim_oil_columns_length = (int)STATIC_ARRAY_SIZE(g_nvim_oil_columns);
+    static char const *nvim_oil_columns[] =
+    {
+      // "permissions",
+      // "size",
+      "mtime",
+      "icon",
+    };
+
+    int nvim_oil_columns_length = (int)STATIC_ARRAY_SIZE(nvim_oil_columns);
     MLUA_PUSH_KV_TABLE(L, "columns", nvim_oil_columns_length, 0)
     {
       for(int i = 0;
           i < nvim_oil_columns_length;
           i++)
       {
-        MLUA_PUSH_IDX(L, i + 1) { lua_pushstring(L, g_nvim_oil_columns[i]); }
+        MLUA_PUSH_IDX(L, i + 1) { lua_pushstring(L, nvim_oil_columns[i]); }
       }
     }
 
@@ -1136,7 +1159,7 @@ luaopen_config(
 
     MLUA_PUSH_KV_TABLE(L, "hooks", 0, 1)
     {
-      // TODO: LUA_PUSH_KV(L, "post_checkout", string, "function() vim.cmd('TSUpdate') end");
+      MLUA_PUSH_KV(L, "post_checkout") { lua_pushcfunction(L, treesitter_update); }
     }
   }
 
@@ -1231,14 +1254,15 @@ luaopen_config(
     nvim_highlight(L, "Whitespace", hl);
   }
 
-  /* // disable syntax highlighting
+#if MODE_FOCUS
+  // disable syntax highlighting
   lua_getglobal(L, "vim"); ASSERT(L, lua_istable(L, -1));
   lua_getfield(L, -1, "cmd"); ASSERT(L, lua_istable(L, -1));
   lua_getfield(L, -1, "syntax");
   lua_pushstring(L, "off");
   mlua_pcall_void(L, 1);
   lua_pop(L, 1);
-  */
+#endif
 
 #if PERFORMANCE
   END_PERF_TIME(perf_times, Perf_Time_Download);

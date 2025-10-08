@@ -32,20 +32,6 @@ typedef unsigned int uint;
 
 #define STATIC_ARRAY_SIZE(arr) (sizeof(arr) / sizeof(*arr))
 
-#define PERF_TIME_LIST \
-  PERF_TIME_X(Total) \
-  PERF_TIME_X(Path) \
-  PERF_TIME_X(Opt) \
-  PERF_TIME_X(Download)
-
-enum Perf_Time : int
-{
-#define PERF_TIME_X(n) Perf_Time_##n,
-  PERF_TIME_LIST
-#undef PERF_TIME_X
-  Perf_Time_Count,
-};
-
 #define START_PERF_TIME(g, n) clock_gettime(CLOCK_MONOTONIC, &((g)[n][0]))
 #define END_PERF_TIME(g, n) clock_gettime(CLOCK_MONOTONIC, &((g)[n][1]))
 #define SAME_PERF_TIME(g, n, x) (g)[n][1] = (g)[x][0]
