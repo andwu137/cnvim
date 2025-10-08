@@ -101,8 +101,10 @@ static inline Object
 nvim_mk_obj_string(
     char *s)
 {
-  return (Object){
-    .type = kObjectTypeString, .data.string = (String) {
+  return (Object)
+  {
+    .type = kObjectTypeString, .data.string = (String)
+    {
       .data = s,
       .size = strlen(s),
     }
@@ -114,8 +116,10 @@ nvim_mk_obj_string_from_slice(
     char *s,
     uint s_len)
 {
-  return (Object){
-    .type = kObjectTypeString, .data.string = (String) {
+  return (Object)
+  {
+    .type = kObjectTypeString, .data.string = (String)
+    {
       .data = s,
       .size = s_len,
     }
@@ -481,6 +485,28 @@ mini_pick_window_config(
 }
 
 int
+mini_pick_choose_all(
+    lua_State *L)
+{
+  lua_getglobal(L, "MiniPick");
+  lua_getfield(L, -1, "get_picker_opts");
+  mlua_pcall(L, 0, 1);
+  lua_getfield(L, -1, "mappings");
+  int mappings = lua_gettop(L);
+
+  lua_getfield(L, mappings, "mark_all");
+  lua_getfield(L, mappings, "choose_marked");
+
+  lua_getglobal(L, "vim");
+  lua_getfield(L, -1, "api");
+  lua_getfield(L, -1, "nvim_input");
+  lua_pushfstring(L, "%s%s", lua_tostring(L, mappings + 1), lua_tostring(L, mappings + 2));
+  mlua_pcall_void(L, 1);
+
+  return 0;
+}
+
+int
 conform_formatters_by_ft_python(
     lua_State *L)
 {
@@ -822,6 +848,7 @@ luaopen_config(
   nvim_map(L, "n", "<leader>wf", "<cmd>horizontal resize<cr><cmd>vertical resize<cr>");
 
   NVIM_MAP_CMD(L, "n", "<leader>wN", "setlocal buftype=nofile"); // turn off ability to save
+
   /* End Keymaps */
 
   // Highlight when yanking (copying) text
@@ -944,6 +971,14 @@ luaopen_config(
   MLUA_REQUIRE_SETUP_TABLE(L, "mini.pick", 0, 1)
   {
     MLUA_PUSH_KV_TABLE_KV(L, "window", "config") { lua_pushcfunction(L, mini_pick_window_config); }
+    MLUA_PUSH_KV_TABLE(L, "mappings", 0, 1)
+    {
+      MLUA_PUSH_KV_TABLE(L, "choose_all", 0, 2)
+      {
+        MLUA_PUSH_KV(L, "char") { lua_pushstring(L, "<C-q>"); }
+        MLUA_PUSH_KV(L, "func") { lua_pushcfunction(L, mini_pick_choose_all); }
+      }
+    }
   }
 
   NVIM_MAP_CMD(L, "n", "<leader>sf", "Pick files");
