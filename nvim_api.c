@@ -126,9 +126,11 @@ typedef uint64_t OptionalKeys;
 
 // BEGIN https://github.com/neovim/neovim/blob/51af2797c2fe0fdb1774d6dd4383d8cbed215df0/src/nvim/api/keysets_defs.h#L165
 typedef struct {
-  Object scope;
-  Object win;
-  Object buf;
+  OptionalKeys is_set__option_;
+  String scope;
+  Window win;
+  Buffer buf;
+  String filetype;
 } Dict(option);
 
 typedef struct {
@@ -227,13 +229,9 @@ typedef enum {
 #define KEYSET_OPTIDX_create_autocmd__command 6
 #define KEYSET_OPTIDX_create_autocmd__pattern 7
 #define KEYSET_OPTIDX_create_autocmd__callback 8
-// END
 
-// BEGIN build neovim: build/src/nvim/auto/keysets_defs.generated.h
 #define KEYSET_OPTIDX_create_augroup__clear 1
-// END
 
-// BEGIN build neovim: build/src/nvim/auto/keysets_defs.generated.h
 #define KEYSET_OPTIDX_highlight__bg 1
 #define KEYSET_OPTIDX_highlight__fg 2
 #define KEYSET_OPTIDX_highlight__sp 3
@@ -264,9 +262,7 @@ typedef enum {
 #define KEYSET_OPTIDX_highlight__underdotted 28
 #define KEYSET_OPTIDX_highlight__underdouble 29
 #define KEYSET_OPTIDX_highlight__strikethrough 30
-// END
 
-// BEGIN build/src/nvim/auto/keysets_defs.generated.h
 #define KEYSET_OPTIDX_keymap__desc 1
 #define KEYSET_OPTIDX_keymap__expr 2
 #define KEYSET_OPTIDX_keymap__script 3
@@ -276,6 +272,11 @@ typedef enum {
 #define KEYSET_OPTIDX_keymap__noremap 7
 #define KEYSET_OPTIDX_keymap__callback 8
 #define KEYSET_OPTIDX_keymap__replace_keycodes 9
+
+#define KEYSET_OPTIDX_option__buf 1
+#define KEYSET_OPTIDX_option__win 2
+#define KEYSET_OPTIDX_option__scope 3
+#define KEYSET_OPTIDX_option__filetype 4
 // END
 
 /* API Functions */
