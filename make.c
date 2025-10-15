@@ -105,7 +105,7 @@ read_exec_stdout(
     char **restrict envp)
 {
   int pipefd[2];
-  if(pipe(pipefd) == -1) { LOG_ERROR("pipe failed"); return 0; }
+  if(pipe(pipefd) == -1) { LOG_ERROR("pipe failed\n"); return 0; }
   int out_pid = fork(); // I know, we all hate fork, deal with it
   if(out_pid == -1)
   {
@@ -119,15 +119,18 @@ read_exec_stdout(
     close(pipefd[1]);
 
     execve(exec[0], exec, envp);
-    PANIC("failed to exec");
+    PANIC("failed to exec\n");
   }
   else
   {
     close(pipefd[1]);
 
     ssize_t len = read(pipefd[0], out, out_cap);
-    if(len == -1) { LOG_ERROR("read from pipe failed"); return 0; }
-    waitpid(out_pid, NULL, 0);
+    if(len == -1) { LOG_ERROR("read from pipe failed\n"); return 0; }
+
+    int wstatus;
+    waitpid(out_pid, &wstatus, 0);
+    if(WEXITSTATUS(wstatus) != 0) { LOG_ERROR("process exited with error\n"); return 0; }
 
     close(pipefd[0]);
     while(isspace(out[len - 1])) { out[--len] = 0; }
@@ -158,7 +161,7 @@ get_pkg_configs(
   pkg_config[1] = cflags_flag;
   if(!read_exec_stdout(pkg_config, cflags_out, cflags_out_cap, envp))
   {
-    LOG_ERROR("pkg-config cflags failed");
+    LOG_ERROR("pkg-config cflags failed\n");
     goto EXIT;
   }
 
@@ -166,7 +169,7 @@ get_pkg_configs(
   pkg_config[1] = libs_flag;
   if(!read_exec_stdout(pkg_config, libs_out, libs_out_cap, envp))
   {
-    LOG_ERROR("pkg-config libs failed");
+    LOG_ERROR("pkg-config libs failed\n");
     goto EXIT;
   }
 
