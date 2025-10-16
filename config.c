@@ -3,6 +3,8 @@
 // TODO: refactor locality of option settings
 // TODO: more asserts on lua types
 // TODO: get ref for function keybinds
+// TODO: keep vim and deps add on the stack
+// TODO: switch from functions to macros because of ASSERT and __FILE__
 
 #include <ctype.h>
 #include <lauxlib.h>
@@ -1215,6 +1217,18 @@ luaopen_config(
   mlua_require_setup(L, "colortils");
   mlua_pcall_void(L, 0);
 #endif // MODE_DESIGN
+
+  // Indent Guides
+  MLUA_MINIDEPS_ADD(L, 0, 1)
+  {
+    MLUA_PUSH_KV(L, "source") { lua_pushstring(L, "https://github.com/lukas-reineke/indent-blankline.nvim"); }
+  }
+
+  MLUA_REQUIRE_SETUP_TABLE(L, "ibl", 0, 2)
+  {
+    MLUA_PUSH_KV_TABLE_KV(L, "scope", "enabled") { lua_pushboolean(L, false); }
+    MLUA_PUSH_KV_TABLE_KV(L, "indent", "char") { lua_pushstring(L, "▏"); }
+  }
 
   // Theme
 #if MODE_THEME
