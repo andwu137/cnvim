@@ -22,10 +22,24 @@ typedef unsigned int uint;
 #define FILE_POS
 #endif
 
-#define PANIC_FMT(L, fmt, ...) luaL_error(L, fmt FILE_POS, __VA_ARGS__)
-#define PANIC(L, msg) luaL_error(L, "ERROR: " FILE_POS msg)
+#define PANIC_RAW_FMT(L, fmt, ...) luaL_error(L, fmt, __VA_ARGS__)
+#define PANIC_FMT(L, fmt, ...) PANIC_RAW_FMT(L, fmt, __VA_ARGS__)
+#define PANIC(L, msg) luaL_error(L, "ERROR" FILE_POS msg)
+
+static inline void
+Assert(
+    lua_State *L,
+    uint b,
+    char *msg)
+{
+  if(!b)
+  {
+    PANIC_RAW_FMT(L, "%s", msg);
+  }
+}
+
 #if DEBUG
-#define ASSERT(L, b) do { if(!(b)) { PANIC(L, "assert(" STRINGIFY(b) ")"); } } while(0)
+#define ASSERT(L, b) Assert(L, b, "ERROR:" FILE_POS "assert(" STRINGIFY(b) ")\n")
 #else
 #define ASSERT(L, b) (void)(b)
 #endif
