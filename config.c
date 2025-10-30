@@ -1217,25 +1217,29 @@ luaopen_config(
   }
 
 #if 0
-  // other themes
-  static char const *color_themes[] =
+  MLUA_MINIDEPS_ADD(L, 0, 1)
   {
-    "https://github.com/EdenEast/nightfox.nvim",
-    "https://github.com/ramojus/mellifluous.nvim",
-    "https://github.com/rayes0/blossom.vim",
-    "https://github.com/rebelot/kanagawa.nvim",
-    "https://github.com/kepano/flexoki-neovim",
-  };
-  int color_themes_length = (int)STATIC_ARRAY_SIZE(color_themes);
+    MLUA_PUSH_KV(L, "source") { lua_pushstring(L, "https://github.com/EdenEast/nightfox.nvim"); }
+  }
 
-  for(int i = 0;
-      i < color_themes_length;
-      i += 1)
+  MLUA_MINIDEPS_ADD(L, 0, 1)
   {
-    MLUA_MINIDEPS_ADD(L, 0, 1)
-    {
-      MLUA_PUSH_KV(L, "source") { lua_pushstring(L, color_themes[i]); }
-    }
+    MLUA_PUSH_KV(L, "source") { lua_pushstring(L, "https://github.com/ramojus/mellifluous.nvim"); }
+  }
+
+  MLUA_MINIDEPS_ADD(L, 0, 1)
+  {
+    MLUA_PUSH_KV(L, "source") { lua_pushstring(L, "https://github.com/rayes0/blossom.vim"); }
+  }
+
+  MLUA_MINIDEPS_ADD(L, 0, 1)
+  {
+    MLUA_PUSH_KV(L, "source") { lua_pushstring(L, "https://github.com/rebelot/kanagawa.nvim"); }
+  }
+
+  MLUA_MINIDEPS_ADD(L, 0, 1)
+  {
+    MLUA_PUSH_KV(L, "source") { lua_pushstring(L, "https://github.com/kepano/flexoki-neovim"); }
   }
 
   MLUA_REQUIRE_SETUP_CALL(L, "flexoki");
