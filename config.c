@@ -710,7 +710,7 @@ luaopen_config(
 
   // Increase time before timeout
   nvim_set_o(L, "timeout", nvim_mk_obj_bool(true));
-  nvim_set_o(L, "timeoutlen", nvim_mk_obj_int(5'000));
+  nvim_set_o(L, "timeoutlen", nvim_mk_obj_int(1'000));
 
   // Configure how new splits should be opened
   nvim_set_o(L, "splitright", nvim_mk_obj_bool(true));
