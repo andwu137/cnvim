@@ -785,8 +785,8 @@ luaopen_config(
 
   // Navigation
   /// Center Screen When Scrolling
-  nvim_map(L, "n", "<C-d>", "<C-d>zz");
-  nvim_map(L, "n", "<C-u>", "<C-u>zz");
+  // nvim_map(L, "n", "<C-d>", "<C-d>zz");
+  // nvim_map(L, "n", "<C-u>", "<C-u>zz");
 
   /// Navigate Wrapped Lines
   nvim_map(L, "n", "j", "gj");
