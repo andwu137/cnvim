@@ -1222,7 +1222,7 @@ luaopen_config(
     MLUA_PUSH_KV_TABLE_IDX(L, "depends") { lua_pushstring(L, "rktjmp/lush.nvim"); }
   }
 
-#if 0
+  // light modes
   MLUA_MINIDEPS_ADD(L, 0, 1)
   {
     MLUA_PUSH_KV(L, "source") { lua_pushstring(L, "https://github.com/EdenEast/nightfox.nvim"); }
@@ -1240,24 +1240,30 @@ luaopen_config(
 
   MLUA_MINIDEPS_ADD(L, 0, 1)
   {
-    MLUA_PUSH_KV(L, "source") { lua_pushstring(L, "https://github.com/rebelot/kanagawa.nvim"); }
-  }
-
-  MLUA_MINIDEPS_ADD(L, 0, 1)
-  {
     MLUA_PUSH_KV(L, "source") { lua_pushstring(L, "https://github.com/kepano/flexoki-neovim"); }
   }
 
   MLUA_REQUIRE_SETUP_CALL(L, "flexoki");
   MLUA_REQUIRE_SETUP_CALL(L, "nightfox");
   MLUA_REQUIRE_SETUP_TABLE_CALL(L, "mellifluous");
-#endif
+
+  // dark modes
+  MLUA_MINIDEPS_ADD(L, 0, 1)
+  {
+    MLUA_PUSH_KV(L, "source") { lua_pushstring(L, "https://github.com/RostislavArts/naysayer.nvim"); }
+  }
+
+  // mixed modes
+  MLUA_MINIDEPS_ADD(L, 0, 1)
+  {
+    MLUA_PUSH_KV(L, "source") { lua_pushstring(L, "https://github.com/rebelot/kanagawa.nvim"); }
+  }
 
   // enable theme
   lua_getglobal(L, "vim"); ASSERT(L, lua_istable(L, -1));
   lua_getfield(L, -1, "cmd"); ASSERT(L, lua_istable(L, -1));
   lua_getfield(L, -1, "colorscheme");
-  lua_pushstring(L, "rosebones");
+  lua_pushstring(L, "zenwritten");
   MLUA_PCALL_VOID(L, 1);
   lua_pop(L, 1);
 #endif
@@ -1275,6 +1281,11 @@ luaopen_config(
     Dict(highlight) hl = {0};
     PUT_KEY(hl, highlight, fg, nvim_mk_obj_string("#D0D1D8"));
     nvim_highlight(L, "Whitespace", hl);
+  }
+  {
+    Dict(highlight) hl = {0};
+    PUT_KEY(hl, highlight, italic, true);
+    nvim_highlight(L, "Comment", hl);
   }
 
 #if MODE_FOCUS
