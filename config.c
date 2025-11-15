@@ -855,6 +855,9 @@ luaopen_config(
     MLUA_PUSH_KV(L, "n_lines") { lua_pushinteger(L, 500); }
   }
 
+  // extras
+  MLUA_REQUIRE_SETUP_CALL(L, "mini.extra");
+
   // split / join arguments for section
   MLUA_REQUIRE_SETUP_TABLE(L, "mini.splitjoin", 0, 1)
   {
@@ -988,11 +991,11 @@ luaopen_config(
     }
   }
 
-  NVIM_MAP_CMD(L, "n", "<leader>sf", "Pick files");
+  NVIM_MAP_CMD(L, "n", "<leader>sf", "lua MiniPick.builtin.cli({ command = { 'fd', '-H', '-E.git' } })");
+  NVIM_MAP_CMD(L, "n", "<leader>sd", "lua if not pcall(MiniExtra.pickers.git_files) then MiniPick.builtin.files() end");
   NVIM_MAP_CMD(L, "n", "<leader>sg", "Pick grep_live");
   NVIM_MAP_CMD(L, "n", "<leader>so", "Pick buffers");
-  NVIM_MAP_CMD(L, "n", "<leader>sn",
-      "lua MiniPick.start({ source = { cwd = vim.fn.stdpath('config') } }))");
+  NVIM_MAP_CMD(L, "n", "<leader>sn", "lua MiniPick.start({ source = { cwd = vim.fn.stdpath('config') } }))");
   NVIM_MAP_CMD(L, "n", "<leader>sm",
       "lua MiniPick.start({ source = { items = "
       "vim.fn.systemlist('man -k ' .. vim.fn.input('Man page: ')) } })");
