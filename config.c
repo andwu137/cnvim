@@ -59,6 +59,9 @@ static char const *g_lsp_servers[] =
   "lua_ls",
   "clangd",
   "ols",
+  "ts_ls",
+  "html",
+  "cssls",
 };
 
 /* HELPERS */
