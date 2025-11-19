@@ -2,7 +2,7 @@
 This project is purely for fun (it was not fun), it will probably break on other computers / versions of nvim.
 I would guess this has a worse startup time than jit-ed lua (unverified).
 
-I tested this on `nvim-v0.11.4`, `luajit-5.1`, `gcc-15.2.1`, `linux-x86_64`, `glibc-2.41`.
+I tested this on `nvim-v0.11.5`, `LuaJIT-2.1.1761727121`, `gcc-15.2.1`, `linux-x86_64`, `glibc-2.41`.
 
 Build Requires:
 - `gcc` or `any other C compiler that supports this relatively standard C`
