@@ -804,7 +804,7 @@ luaopen_config(
   NVIM_MAP_CMD(L, "n", "<leader>mm", "make");
   NVIM_MAP_CMD(L, "n", "<leader>mc",
     "lua vim.ui.input({ prompt = 'Make Command: ', default = vim.o.makeprg }, "
-      "function(usr_input) vim.o.makeprg = usr_input end)");
+      "function(usr_input) if usr_input ~= nil and usr_input ~= '' then vim.o.makeprg = usr_input end end)");
 
   // UI
   NVIM_MAP_CMD(L, "n", "<leader>um", "messages");
