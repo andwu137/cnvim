@@ -751,17 +751,7 @@ luaopen_config(
   nvim_set_o(L, "guicursor", nvim_mk_obj_string("n-v-c:block"));
 
   // cinoptions
-  {
-    Object cino_obj = nvim_get_o(L, "cinoptions");
-    ASSERT(L, cino_obj.type == kObjectTypeString);
-    String cinoptions = cino_obj.data.string;
-    ASSERT(L, cinoptions.size < string_arena.capacity);
-    copy_alloc_arena(&string_arena, (uint8_t *)cinoptions.data, cinoptions.size);
-    copy_alloc_arena(&string_arena, (uint8_t *)":0,l1,b1", sizeof(":0,l1") - 1);
-    nvim_set_o(L, "cinoptions",
-        nvim_mk_obj_string_from_slice(string_arena.buffer, string_arena.length));
-    clear_arena(&string_arena);
-  }
+  nvim_set_o(L, "cinoptions", nvim_mk_obj_string(":0,l1,b1"));
 
   // conceal options (syntax visibility)
   NVIM_MK_AUTOCMD_CALLBACK(
