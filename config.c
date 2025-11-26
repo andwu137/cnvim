@@ -735,7 +735,7 @@ luaopen_config(
   nvim_set_o(L, "tabstop", nvim_mk_obj_int(4));
   nvim_set_o(L, "softtabstop", nvim_mk_obj_int(4));
   nvim_set_o(L, "shiftwidth", nvim_mk_obj_int(4));
-  // nvim_set_o(L, "expandtab", nvim_mk_obj_bool(true));
+  nvim_set_o(L, "expandtab", nvim_mk_obj_bool(true));
 
   // Dont pass this marker
   nvim_set_o(L, "colorcolumn", nvim_mk_obj_string("80"));
@@ -749,6 +749,9 @@ luaopen_config(
 
   // Disable cursor changing
   nvim_set_o(L, "guicursor", nvim_mk_obj_string("n-v-c:block"));
+
+  // cinkeys
+  nvim_set_o(L, "cinkeys", nvim_mk_obj_string("0{,0},0),0],:,!^F,o,O,e"));
 
   // cinoptions
   nvim_set_o(L, "cinoptions", nvim_mk_obj_string(":0,l1,b1"));
@@ -981,7 +984,7 @@ luaopen_config(
     }
   }
 
-  NVIM_MAP_CMD(L, "n", "<leader>sf", "lua MiniPick.builtin.cli({ command = { 'fd', '-H', '-E.git' } })");
+  NVIM_MAP_CMD(L, "n", "<leader>sf", "lua MiniPick.builtin.cli({ command = { 'fd', '-t', 'f', '-H', '-E.git' } })");
   NVIM_MAP_CMD(L, "n", "<leader>sd", "lua if not pcall(MiniExtra.pickers.git_files) then MiniPick.builtin.files() end");
   NVIM_MAP_CMD(L, "n", "<leader>sg", "Pick grep_live");
   NVIM_MAP_CMD(L, "n", "<leader>so", "Pick buffers");
