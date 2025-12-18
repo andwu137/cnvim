@@ -631,7 +631,7 @@ luaopen_config(
 
   // get runtime path
   char *runtimepath_default_string = runtimepath_default(false);
-  uint runtimepath_default_string_len = strnlen(runtimepath_default_string, string_arena.capacity);
+  uint runtimepath_default_string_len = strlen(runtimepath_default_string); // WARN: unsafe string length
   ASSERT(L, runtimepath_default_string_len > 0);
 
   // create the new runtimepath
@@ -728,7 +728,7 @@ luaopen_config(
   // nvim_set_o(L, "cursorline", nvim_mk_obj_bool(true));
 
   // Minimal number of screen lines to keep above and below the cursor.
-  nvim_set_o(L, "scrolloff", nvim_mk_obj_int(1));
+  // nvim_set_o(L, "scrolloff", nvim_mk_obj_int(1));
   nvim_set_o(L, "sidescrolloff", nvim_mk_obj_int(20));
 
   // Tabs

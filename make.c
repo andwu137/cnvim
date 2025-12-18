@@ -185,19 +185,20 @@ main(
     char **envp)
 {
   /* vars */
-  char *warn_flags[] = {
+  char *general_flags[] = {
+    "-std=c23",
+
+    // warnings
     "-Wall",
     "-Wextra",
     "-Wpedantic",
-  };
-  size_t warn_flags_len = STATIC_ARRAY_SIZE(warn_flags);
 
-  char *shared_lib_flags[] = {
+    // shared lib
     "-shared",
     "-fPIC",
     "-Wl,-undefined,dynamic_lookup",
   };
-  size_t shared_lib_flags_len = STATIC_ARRAY_SIZE(shared_lib_flags);
+  size_t general_flags_len = STATIC_ARRAY_SIZE(general_flags);
 
   /* targets */
   char *release_flags[] = {
@@ -266,7 +267,7 @@ main(
 
   /* setup build */
   // warn
-  ASSERT(push_array_command_builder(&command, warn_flags, warn_flags_len), "ran out of args\n");
+  ASSERT(push_array_command_builder(&command, general_flags, general_flags_len), "ran out of args\n");
 
   // pkg-config
   char cflags[256] = {0}; // -I/path/to/lib
@@ -298,9 +299,6 @@ main(
 
   // source
   ASSERT(push_array_command_builder(&command, source_names, source_names_len), "ran out of args\n");
-
-  // shared lib
-  ASSERT(push_array_command_builder(&command, shared_lib_flags, shared_lib_flags_len), "ran out of args\n");
 
   ASSERT(push_command_builder(&command, "-o"), "ran out of args\n");
   ASSERT(push_command_builder(&command, output_name), "ran out of args\n");

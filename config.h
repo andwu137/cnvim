@@ -50,4 +50,7 @@ Assert(
 #define END_PERF_TIME(g, n) clock_gettime(CLOCK_MONOTONIC, &((g)[n][1]))
 #define SAME_PERF_TIME(g, n, x) (g)[n][1] = (g)[x][0]
 
+#define Min(x,y) ((x) < (y) ? (x) : (y))
+#define Max(x,y) ((x) > (y) ? (x) : (y))
+
 #endif // CONFIG_H
