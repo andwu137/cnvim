@@ -803,6 +803,9 @@ luaopen_config(
   NVIM_MAP_CMD(L, "n", "<leader>cm", "Man");
   NVIM_MAP_CMD(L, "n", "<leader>cW", "%s/\\s\\+$//g"); // remove trailing whitespace
 
+  // Toggle
+  NVIM_MAP_CMD(L, "n", "<leader>tw", "lua vim.o.wrap = not vim.o.wrap");
+
   // Make
   NVIM_MAP_CMD(L, "n", "<leader>mm", "make");
   NVIM_MAP_CMD(L, "n", "<leader>mc",
@@ -1174,6 +1177,14 @@ luaopen_config(
   }
 
 #if MODE_DESIGN
+  // markdown editing
+  MLUA_MINIDEPS_ADD(L, 0, 1)
+  {
+    MLUA_PUSH_KV(L, "source") { lua_pushstring(L, "https://github.com/MeanderingProgrammer/render-markdown.nvim"); }
+  }
+
+  MLUA_REQUIRE_SETUP_CALL(L, "render-markdown");
+
   // highlight color codes
   MLUA_MINIDEPS_ADD(L, 0, 1)
   {
