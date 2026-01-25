@@ -754,7 +754,7 @@ luaopen_config(
   nvim_set_o(L, "cinkeys", nvim_mk_obj_string("0{,0},0),0],:,!^F,o,O,e"));
 
   // cinoptions
-  nvim_set_o(L, "cinoptions", nvim_mk_obj_string(":0,l1,b1"));
+  nvim_set_o(L, "cinoptions", nvim_mk_obj_string(":0,l1,b1,=0"));
 
   // conceal options (syntax visibility)
   NVIM_MK_AUTOCMD_CALLBACK(
