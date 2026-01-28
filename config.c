@@ -1184,6 +1184,7 @@ luaopen_config(
   }
 
   MLUA_REQUIRE_SETUP_CALL(L, "render-markdown");
+  NVIM_MAP_CMD(L, "n", "<leader>tm", "RenderMarkdown toggle");
 
   // highlight color codes
   MLUA_MINIDEPS_ADD(L, 0, 1)
