@@ -742,6 +742,7 @@ luaopen_config(
 
   // Linewraps
   nvim_set_o(L, "showbreak", nvim_mk_obj_string("└▶"));
+  nvim_set_o(L, "linebreak", nvim_mk_obj_bool(true));
   nvim_set_o(L, "wrap", nvim_mk_obj_bool(false));
 
   // Enable break indent
@@ -774,7 +775,7 @@ luaopen_config(
   nvim_map(L, "i", "<c-space>", "<c-x><c-o>");
 
   // Terminal Binds
-  nvim_map(L, "t", "<C-w>", "<c-\\><c-n>");
+  nvim_map(L, "t", "<C-w>", "<c-\\><c-n><C-w>");
 
   // Navigation
   /// Center Screen When Scrolling
@@ -808,6 +809,9 @@ luaopen_config(
 
   // Make
   NVIM_MAP_CMD(L, "n", "<leader>mm", "make");
+  // TODO: handle windows and mac
+  NVIM_MAP_CMD(L, "n", "<leader>mb",
+      "lua if vim.loop.os_uname().sysname == 'Linux' then vim.o.makeprg = 'bash build.sh' end");
   NVIM_MAP_CMD(L, "n", "<leader>mc",
     "lua vim.ui.input({ prompt = 'Make Command: ', default = vim.o.makeprg }, "
       "function(usr_input) if usr_input ~= nil and usr_input ~= '' then vim.o.makeprg = usr_input end end)");
