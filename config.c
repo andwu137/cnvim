@@ -716,10 +716,10 @@ luaopen_config(
   nvim_set_o(L, "splitright", nvim_mk_obj_bool(true));
   nvim_set_o(L, "splitbelow", nvim_mk_obj_bool(true));
 
-  //  See `:help 'list'`
-  //  and `:help 'listchars'`
+  // See `:help 'list'` and `:help 'listchars'`
   nvim_set_o(L, "list", nvim_mk_obj_bool(true));
-  nvim_set_o(L, "listchars", nvim_mk_obj_string("tab:» ,trail:·,nbsp:␣"));
+  // maybe useful: 'precedes:⟨'
+  nvim_set_o(L, "listchars", nvim_mk_obj_string("tab:» ,trail:·,nbsp:␣,extends:⟩"));
 
   // Preview substitutions live, as you type!
   nvim_set_o(L, "inccommand", nvim_mk_obj_string("split"));
@@ -742,8 +742,10 @@ luaopen_config(
 
   // Linewraps
   nvim_set_o(L, "showbreak", nvim_mk_obj_string("└▶"));
-  nvim_set_o(L, "linebreak", nvim_mk_obj_bool(true));
   nvim_set_o(L, "wrap", nvim_mk_obj_bool(false));
+  nvim_set_o(L, "linebreak", nvim_mk_obj_bool(true));
+  nvim_set_o(L, "breakindent", nvim_mk_obj_bool(true));
+  nvim_set_o(L, "breakindentopt", nvim_mk_obj_string("list:-1"));
 
   // Enable break indent
   nvim_set_o(L, "breakindent", nvim_mk_obj_bool(true));
