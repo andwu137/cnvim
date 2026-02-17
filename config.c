@@ -759,6 +759,10 @@ luaopen_config(
   // cinoptions
   nvim_set_o(L, "cinoptions", nvim_mk_obj_string(":0,l1,b1,=0"));
 
+  // input formatting
+  nvim_mk_autocmd_command(L, "BufEnter", "Setup format options", "my-formatoptions", true,
+      nvim_mk_string("set formatoptions-=ro"));
+
   // conceal options (syntax visibility)
   NVIM_MK_AUTOCMD_CALLBACK(
       L, "BufEnter", // NOTE: maybe you would put this on another event
