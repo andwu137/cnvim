@@ -742,7 +742,7 @@ luaopen_config(
 
   // Linewraps
   nvim_set_o(L, "showbreak", nvim_mk_obj_string("└▶"));
-  nvim_set_o(L, "wrap", nvim_mk_obj_bool(false));
+  nvim_set_o(L, "wrap", nvim_mk_obj_bool(true));
   nvim_set_o(L, "linebreak", nvim_mk_obj_bool(true));
   nvim_set_o(L, "breakindent", nvim_mk_obj_bool(true));
   nvim_set_o(L, "breakindentopt", nvim_mk_obj_string("list:-1"));
