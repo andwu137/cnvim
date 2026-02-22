@@ -791,6 +791,8 @@ luaopen_config(
   /// Navigate Wrapped Lines
   nvim_map(L, "n", "j", "gj");
   nvim_map(L, "n", "k", "gk");
+  nvim_map(L, "v", "j", "gj");
+  nvim_map(L, "v", "k", "gk");
 
   // Yanks
   nvim_map(L, "n", "<leader>y", "\"+y");
