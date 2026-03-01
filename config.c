@@ -1195,7 +1195,18 @@ luaopen_config(
     MLUA_PUSH_KV(L, "source") { lua_pushstring(L, "https://github.com/MeanderingProgrammer/render-markdown.nvim"); }
   }
 
-  MLUA_REQUIRE_SETUP_CALL(L, "render-markdown");
+  MLUA_REQUIRE_SETUP_TABLE(L, "render-markdown", 0, 2)
+  {
+    MLUA_PUSH_KV_TABLE(L, "code", 0, 1)
+    {
+      MLUA_PUSH_KV(L, "border") { lua_pushstring(L, "thick"); }
+    }
+
+    MLUA_PUSH_KV_TABLE(L, "pipe_table", 0, 1)
+    {
+      MLUA_PUSH_KV(L, "border_enabled") { lua_pushboolean(L, false); }
+    }
+  }
   NVIM_MAP_CMD(L, "n", "<leader>tm", "RenderMarkdown toggle");
 
   // highlight color codes
