@@ -4,6 +4,7 @@
 // TODO: more asserts on lua types
 // TODO: get ref for function keybinds
 // TODO: keep vim and deps add on the stack
+// TODO: the arena impl is garbage
 
 #include <ctype.h>
 #include <lauxlib.h>
@@ -769,6 +770,37 @@ luaopen_config(
                      // ... but, the once flag is not exposed in my api lol
       "Disable Conceal on All Buffers", "my-conceallevel", true,
       disable_conceallevel);
+
+  // autoread
+  nvim_set_o(L, "autoread", nvim_mk_obj_bool(true));
+  {
+    static char *autoread_events[] =
+    {
+      "BufEnter",
+      "CursorHold",
+      "CursorHoldI",
+      "FocusGained",
+    };
+    int arena_pos = string_arena.length;
+
+    char *augroup_name_str = "my-autoread";
+    uint augroup_name = string_arena.length;
+    ASSERT(L, copy_alloc_arena(&string_arena, (uint8_t *)augroup_name_str, sizeof(augroup_name_str) - 1));
+
+    for(int i = 0;
+        i < (int)STATIC_ARRAY_SIZE(autoread_events);
+        i += 1)
+    {
+      ASSERT(L, copy_alloc_arena(&string_arena, (uint8_t *)autoread_events[i], sizeof(augroup_name_str)));
+      nvim_mk_autocmd_command(
+          L, autoread_events[i], // NOTE: maybe you would put this on another event
+                         // ... but, the once flag is not exposed in my api lol
+          "Enabled checking if file has been modified", string_arena.buffer + augroup_name, true,
+          nvim_mk_string("if mode() != 'c' | checktime | endif"));
+    }
+
+    string_arena.length = arena_pos;
+  }
 
   // completion
   nvim_set_o(L, "wildmode", nvim_mk_obj_string("longest:full"));
