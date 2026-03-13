@@ -241,7 +241,6 @@ nvim_mk_autocmd_callback(
 }
 
 #define NVIM_MK_AUTOCMD_CALLBACK(L, name, desc, augroup_name, augroup_clear, callback) do { \
-  lsp_disable_semantic_highlights(L); \
   lua_register(L, "g_" STRINGIFY(callback), callback); \
   lua_getglobal(L, "g_" STRINGIFY(callback)); \
   int lua_ref_##callback = luaL_ref(L, LUA_REGISTRYINDEX); \
